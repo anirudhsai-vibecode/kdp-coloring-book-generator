@@ -177,6 +177,14 @@ Automated print QA for page images and KDP PDF packages. Exit code **0** = all h
 
 Thresholds are documented in [`qa_checks/THRESHOLDS.md`](qa_checks/THRESHOLDS.md).
 
+### Page Factory exit gate (before QA handoff)
+
+After generate, before QA: run the exit gate. On FAIL → regenerate; do **not** send to QA. Wired into `main.py` by default (`--max-regen 2`, escape with `--skip-exit-gate`). Details: [`docs/PAGE_FACTORY.md`](docs/PAGE_FACTORY.md).
+
+```bash
+python scripts/page_factory_exit_gate.py path/to/images_dir
+```
+
 ```bash
 # Image pages (PNG/JPG) — canvas, pure B&W, margins, solid fills, wire-grid, hairlines
 python scripts/qa_gate.py images path/to/dir
@@ -205,8 +213,12 @@ kdp-coloring-book-generator/
   requirements.txt
   .env.example
   README.md
+  docs/
+    MASTER_PROMPT.md
+    PAGE_FACTORY.md
   scripts/
     qa_gate.py
+    page_factory_exit_gate.py
   qa_checks/
     THRESHOLDS.md
   src/kdp_coloring/

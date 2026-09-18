@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import subprocess
 import json
 import logging
 import random
@@ -78,6 +79,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
             "then rebuild interior.pdf + cover.pdf. Skips if raw/ is missing."
         ),
     )
+    p.add_argument(
+        "--skip-exit-gate",
+        action="store_true",
+        help="Skip Page Factory hard image QA exit gate (not for production handoff)",
+    )
+    p.add_argument(
+        "--max-regen",
+        type=int,
+        default=2,
+        help="On exit-gate FAIL for a page, regenerate up to N times (default: 2)",
+    )
     return p.parse_args(argv)
 
 
@@ -92,6 +104,15 @@ def reprocess_book(book_dir: Path, cfg: dict) -> int:
         image_paths = reprocess_raw_images(book_dir, cfg)
     except FileNotFoundError as e:
         print(str(e), file=sys.stderr)
+        return 1
+
+    images_dir = book_dir / "images"
+    gate_code = run_page_factory_exit_gate(images_dir)
+    if gate_code != 0:
+        print(
+            "EXIT GATE FAIL after reprocess — do NOT hand off to QA until pages PASS.",
+            file=sys.stderr,
+        )
         return 1
 
     interior_path = book_dir / "interior.pdf"
@@ -150,6 +171,29 @@ def reprocess_book(book_dir: Path, cfg: dict) -> int:
     return 0
 
 
+def run_page_factory_exit_gate(images_path: Path, prior_scenes: Path | None = None) -> int:
+    """Hard image QA before PDF / QA handoff. 0=PASS, 1=FAIL."""
+    gate = ROOT / "scripts" / "page_factory_exit_gate.py"
+    if not gate.is_file():
+        # Fall back to qa_gate.py directly
+        gate = ROOT / "scripts" / "qa_gate.py"
+        cmd = [sys.executable, str(gate), "images", str(images_path)]
+    else:
+        cmd = [sys.executable, str(gate), str(images_path)]
+    if prior_scenes is not None:
+        cmd.extend(["--prior-scenes", str(prior_scenes)])
+    logging.info("Page Factory exit gate: %s", " ".join(cmd))
+    return int(subprocess.run(cmd, cwd=str(ROOT)).returncode)
+
+
+def gate_single_image(image_path: Path) -> int:
+    """Run hard image QA on one file. 0=PASS, 1=FAIL."""
+    gate = ROOT / "scripts" / "qa_gate.py"
+    cmd = [sys.executable, str(gate), "images", str(image_path)]
+    return int(subprocess.run(cmd, cwd=str(ROOT)).returncode)
+
+
+
 def main(argv: list[str] | None = None) -> int:
     logging.basicConfig(
         level=logging.INFO,
@@ -195,18 +239,54 @@ def main(argv: list[str] | None = None) -> int:
     logging.info("Spine: %.4f in (%s paper)\n%s", spine_width_inches(args.pages, cfg), cfg["paper"], document_spine_formula(cfg))
 
     image_paths: list[Path] = []
+    failed_pages: list[str] = []
     for i, subject in enumerate(subjects):
         out_img = images_dir / f"page_{i + 1:03d}.png"
         logging.info("Page %s/%s: %s", i + 1, args.pages, subject)
-        generate_page_image(
-            subject,
-            out_img,
-            dry_run=args.dry_run,
-            page_index=i,
-            seed=args.seed,
-            cfg=cfg,
-        )
+        attempts = 1 + (0 if args.skip_exit_gate else max(0, args.max_regen))
+        passed = False
+        for attempt in range(1, attempts + 1):
+            generate_page_image(
+                subject,
+                out_img,
+                dry_run=args.dry_run,
+                page_index=i,
+                seed=None if attempt == 1 else (None if args.seed is None else args.seed + attempt * 1000 + i),
+                cfg=cfg,
+            )
+            if args.skip_exit_gate:
+                passed = True
+                break
+            code = gate_single_image(out_img)
+            if code == 0:
+                passed = True
+                break
+            logging.warning(
+                "Exit gate FAIL page %s attempt %s/%s — regenerating…",
+                i + 1,
+                attempt,
+                attempts,
+            )
+        if not passed:
+            failed_pages.append(f"page_{i + 1:03d}.png ({subject})")
         image_paths.append(out_img)
+
+    if failed_pages:
+        print("EXIT GATE FAIL — do NOT hand these pages to QA:", file=sys.stderr)
+        for name in failed_pages:
+            print(f"  - {name}", file=sys.stderr)
+        print(f"Images kept under {images_dir} for inspection.", file=sys.stderr)
+        return 1
+
+    if not args.skip_exit_gate:
+        # Final directory sweep (catches anything missed)
+        batch_code = run_page_factory_exit_gate(images_dir)
+        if batch_code != 0:
+            print(
+                "EXIT GATE FAIL on batch sweep — do NOT hand off to QA.",
+                file=sys.stderr,
+            )
+            return 1
 
     interior_path = book_dir / "interior.pdf"
     cover_path = book_dir / "cover.pdf"
