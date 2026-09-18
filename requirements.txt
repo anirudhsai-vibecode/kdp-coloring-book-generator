@@ -5,3 +5,6 @@ python-dotenv>=1.0.0
 requests>=2.31.0
 opencv-python-headless>=4.8.0
 numpy>=1.24.0
+pypdf>=4.0.0
+# Optional: cover barcode-zone raster check
+# pdf2image>=1.17.0  # also needs poppler-utils on the host

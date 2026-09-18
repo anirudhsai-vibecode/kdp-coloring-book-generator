@@ -170,6 +170,32 @@ Each theme has title templates and a large subject pool so pages get different p
 
 ---
 
+
+## QA hard-FAIL gates
+
+Automated print QA for page images and KDP PDF packages. Exit code **0** = all hard checks PASS; **1** = any hard FAIL. Soft checks print `WARNING` / `SKIP` only.
+
+Thresholds are documented in [`qa_checks/THRESHOLDS.md`](qa_checks/THRESHOLDS.md).
+
+```bash
+# Image pages (PNG/JPG) — canvas, pure B&W, margins, solid fills, wire-grid, hairlines
+python scripts/qa_gate.py images path/to/dir
+python scripts/qa_gate.py images path/to/page.png
+
+# Optional near-dupe soft FLAG (never hard-FAIL alone)
+python scripts/qa_gate.py images path/to/dir --prior-scenes prior_scenes.json
+
+# PDF package — interior and/or cover
+python scripts/qa_gate.py pdf --interior output/.../interior.pdf \
+  --front-matter-pages 4 --designs 32
+
+python scripts/qa_gate.py pdf --interior output/.../interior.pdf \
+  --cover output/.../cover.pdf --pages 68 --spine-factor 0.002252 \
+  --author-text metadata_author.txt
+```
+
+Expected interior layout for **32 designs**: `[N front-matter] + [art, blank]×32` (default N=4 → **68** pages, even). Cover spine ≈ `pages × 0.002252` (white B&W); wrap H ≈ 11.25″. Optional barcode-zone raster needs `pdf2image` + poppler (skipped with a TODO note if missing).
+
 ## Project layout
 
 ```
@@ -179,6 +205,10 @@ kdp-coloring-book-generator/
   requirements.txt
   .env.example
   README.md
+  scripts/
+    qa_gate.py
+  qa_checks/
+    THRESHOLDS.md
   src/kdp_coloring/
     config.py
     themes.py
