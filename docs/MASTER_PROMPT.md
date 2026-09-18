@@ -18,3 +18,4 @@ Create a clean, professional children's coloring-book illustration of {SUBJECT}.
 - 1-bit pure black/white (no gray anti-alias)
 - Subject inset from trim
 - Ages 4–8 simplicity: one main subject + ≤1 prop; active pose when a chore/tool is intended
+- No tiny grids/wire detail; no solid black fills; open colorable interiors
