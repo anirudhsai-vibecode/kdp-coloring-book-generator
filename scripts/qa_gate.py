@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -20,6 +21,11 @@ from typing import Any, Sequence
 
 import numpy as np
 from PIL import Image
+
+try:
+    import yaml
+except ImportError:  # pragma: no cover
+    yaml = None  # type: ignore
 
 try:
     import cv2
@@ -57,6 +63,38 @@ AUTHOR_PLACEHOLDER = "Your Name Here"
 BARCODE_W_IN, BARCODE_H_IN = 2.0, 1.2
 
 IMAGE_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".webp"}
+
+# Eyes heuristic (best-effort CV; see THRESHOLDS.md). Default ON; --skip-eyes to disable.
+EYES_MIN_PUPILS = 1
+EYES_MIN_AREA = 12
+EYES_MAX_AREA_FRAC = 0.04  # of face-region pixels
+EYES_MAX_ASPECT = 2.2
+EYES_MIN_FILL = 0.35
+
+# Chore / tool action classes — same class twice in one book = hard FAIL.
+# Patterns are lowercase substrings; longer / more specific first within each class.
+CHORE_CLASS_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
+    ("broom-sweep", ("broom", "sweeping", "sweep the", "sweeping the floor")),
+    ("watering-can", ("watering can", "watering-can", "water the plants", "watering plants", "watering flowers")),
+    ("stir-spoon", ("stirring", "stir spoon", "mixing spoon", "stirring pot", "stir the")),
+    ("hang-laundry", ("hang laundry", "hanging laundry", "clothesline", "hang clothes", "hanging clothes")),
+    ("scrub-brush", ("scrub brush", "scrubbing", "scrub the", "dish brush", "washing dishes")),
+    ("mop-floor", ("mopping", "mop the", "mop floor")),
+    ("dust-cloth", ("dusting", "dust cloth", "feather duster", "dust the")),
+    ("vacuum", ("vacuuming", "vacuum cleaner", "vacuum the")),
+    ("rake-leaves", ("raking", "rake leaves", "rake the")),
+    ("wash-window", ("washing window", "wash window", "window washing", "wipe window")),
+    ("fold-laundry", ("folding laundry", "fold laundry", "folding clothes")),
+    ("take-trash", ("take out trash", "taking out trash", "trash bag", "garbage bag")),
+    ("make-bed", ("making bed", "make the bed", "making the bed")),
+    ("set-table", ("setting table", "set the table", "setting the table")),
+    ("wash-car", ("washing car", "wash the car", "hose the car")),
+    ("garden-hoe", ("gardening hoe", "hoe the", "hoeing")),
+    ("paint-brush", ("paint brush", "painting fence", "paint the fence")),
+]
+
+PAGE_NUM_SAMPLE_MAX = 6
+PAGE_NUM_CORNER_FRAC = 0.12  # fraction of page W/H for corner crops
 
 
 # ---------------------------------------------------------------------------
@@ -369,6 +407,156 @@ def _normalize_scene(s: str) -> set[str]:
     return {t for t in tokens if t not in stop and len(t) > 1}
 
 
+def normalize_chore_class(subject: str) -> str | None:
+    """Map a scene/subject string to a chore/tool action class, or None."""
+    s = " ".join(
+        "".join(c.lower() if c.isalnum() or c.isspace() else " " for c in subject).split()
+    )
+    if not s:
+        return None
+    for cls, patterns in CHORE_CLASS_PATTERNS:
+        for pat in patterns:
+            if pat in s:
+                return cls
+    return None
+
+
+def _subject_bbox(ink: np.ndarray) -> tuple[int, int, int, int] | None:
+    ys, xs = np.where(ink)
+    if xs.size == 0:
+        return None
+    return int(xs.min()), int(ys.min()), int(xs.max()), int(ys.max())
+
+
+def _count_pupil_like_blobs(face_ink: np.ndarray) -> tuple[int, str]:
+    """
+    Best-effort: count small dark circular-ish components in a face crop.
+
+    Heuristic only — line-art pupils vary; use --skip-eyes if unreliable for a run.
+    """
+    h, w = face_ink.shape
+    if h < 8 or w < 8:
+        return 0, "face region too small"
+    face_area = h * w
+    max_area = max(EYES_MIN_AREA + 1, int(EYES_MAX_AREA_FRAC * face_area))
+    u8 = (face_ink.astype(np.uint8) * 255)
+
+    pupils = 0
+    if cv2 is not None:
+        n, labels, stats, _ = cv2.connectedComponentsWithStats(u8, connectivity=8)
+        for i in range(1, n):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            bw = int(stats[i, cv2.CC_STAT_WIDTH])
+            bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+            if area < EYES_MIN_AREA or area > max_area:
+                continue
+            if bw < 3 or bh < 3:
+                continue
+            if bw > w * 0.35 or bh > h * 0.45:
+                continue
+            aspect = max(bw, bh) / max(1, min(bw, bh))
+            if aspect > EYES_MAX_ASPECT:
+                continue
+            fill = area / max(1, bw * bh)
+            if fill < EYES_MIN_FILL:
+                continue
+            # Circularity from contour when possible
+            cc = (labels == i).astype(np.uint8) * 255
+            contours, _ = cv2.findContours(cc, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if contours:
+                peri = float(cv2.arcLength(contours[0], True))
+                if peri > 0:
+                    circ = 4.0 * np.pi * area / (peri * peri)
+                    if circ < 0.45:
+                        continue
+            pupils += 1
+        return pupils, f"cv2 CC pupils={pupils} (face {w}×{h})"
+
+    # Numpy fallback: scan for compact dark blobs via local bounding boxes of CCs
+    visited = np.zeros_like(face_ink, dtype=bool)
+    ys_all, xs_all = np.where(face_ink)
+    for y0, x0 in zip(ys_all[::3], xs_all[::3]):
+        if visited[y0, x0]:
+            continue
+        stack = [(int(y0), int(x0))]
+        visited[y0, x0] = True
+        cells: list[tuple[int, int]] = []
+        while stack:
+            y, x = stack.pop()
+            cells.append((y, x))
+            for dy, dx in ((0, 1), (0, -1), (1, 0), (-1, 0)):
+                ny, nx = y + dy, x + dx
+                if 0 <= ny < h and 0 <= nx < w and not visited[ny, nx] and face_ink[ny, nx]:
+                    visited[ny, nx] = True
+                    stack.append((ny, nx))
+        area = len(cells)
+        if area < EYES_MIN_AREA or area > max_area:
+            continue
+        ys = [c[0] for c in cells]
+        xs = [c[1] for c in cells]
+        bw = max(xs) - min(xs) + 1
+        bh = max(ys) - min(ys) + 1
+        aspect = max(bw, bh) / max(1, min(bw, bh))
+        fill = area / max(1, bw * bh)
+        if aspect <= EYES_MAX_ASPECT and fill >= EYES_MIN_FILL and bw >= 3 and bh >= 3:
+            pupils += 1
+    return pupils, f"numpy CC pupils={pupils} (face {w}×{h})"
+
+
+def check_eyes_pupils(rep: FileReport, gray: np.ndarray, *, skip: bool = False) -> None:
+    """
+    Hard FAIL (heuristic): character page face region lacks dark pupil-like blobs.
+
+    Looks at the upper half of the subject bbox for small dark circular-ish
+    connected components. Best-effort; default ON. Use --skip-eyes to disable.
+    """
+    if skip:
+        rep.add("eyes_pupils", "SKIP", "disabled via --skip-eyes", hard=False)
+        return
+
+    ink = _black_mask(gray)
+    bbox = _subject_bbox(ink)
+    if bbox is None:
+        rep.add(
+            "eyes_pupils",
+            "FAIL",
+            "heuristic: no subject ink — cannot locate face/pupils",
+        )
+        return
+
+    x0, y0, x1, y1 = bbox
+    bw = x1 - x0 + 1
+    bh = y1 - y0 + 1
+    if bw < 40 or bh < 40:
+        rep.add(
+            "eyes_pupils",
+            "FAIL",
+            f"heuristic: subject bbox {bw}×{bh} too small for face/pupils",
+        )
+        return
+
+    # Face = upper half of subject, horizontally inset 10%
+    mid_y = y0 + bh // 2
+    inset = max(1, bw // 10)
+    fx0, fx1 = x0 + inset, x1 - inset
+    face = ink[y0:mid_y, fx0:fx1]
+    n_pupils, detail = _count_pupil_like_blobs(face)
+    if n_pupils < EYES_MIN_PUPILS:
+        rep.add(
+            "eyes_pupils",
+            "FAIL",
+            f"heuristic: no dark pupil-like blobs in upper-half face "
+            f"(found {n_pupils}, need ≥{EYES_MIN_PUPILS}); {detail}. "
+            f"Re-generate with clear visible eyes/pupils, or pass --skip-eyes",
+        )
+    else:
+        rep.add(
+            "eyes_pupils",
+            "PASS",
+            f"heuristic: {n_pupils} pupil-like blob(s) in face region; {detail}",
+        )
+
+
 def check_near_dupe(
     rep: FileReport,
     scene: str | None,
@@ -384,8 +572,11 @@ def check_near_dupe(
     if not cur:
         rep.add("near_dupe", "SKIP", "empty scene tokens", hard=False)
         return
+    cur_chore = normalize_chore_class(scene)
     best_j = 0.0
     best_prior = ""
+    chore_hit: str | None = None
+    chore_prior = ""
     for p in prior_scenes:
         other = _normalize_scene(p)
         if not other:
@@ -396,6 +587,21 @@ def check_near_dupe(
         if j > best_j:
             best_j = j
             best_prior = p
+        if cur_chore is not None:
+            other_chore = normalize_chore_class(p)
+            if other_chore == cur_chore:
+                chore_hit = cur_chore
+                chore_prior = p
+    # Soft near-dupe becomes HARD when the shared chore/tool class matches.
+    if chore_hit is not None:
+        rep.add(
+            "near_dupe",
+            "FAIL",
+            f"chore-class hard dupe: «{chore_hit}» also in prior «{chore_prior[:80]}» "
+            f"(Jaccard={best_j:.2f})",
+            hard=True,
+        )
+        return
     if best_j >= 0.75:
         rep.add(
             "near_dupe",
@@ -407,11 +613,80 @@ def check_near_dupe(
         rep.add("near_dupe", "PASS", f"max Jaccard={best_j:.2f}", hard=False)
 
 
+def check_chore_class_dupes(
+    reports: list[FileReport],
+    scene_list: Sequence[dict[str, Any]] | None,
+) -> FileReport | None:
+    """
+    Book-level hard FAIL: same normalized chore/tool class on two+ pages.
+
+    scene_list entries: {page, subject} (JSON or YAML via --scene-list).
+    """
+    if scene_list is None:
+        return None
+    rep = FileReport("--scene-list (book chore classes)")
+    by_class: dict[str, list[str]] = {}
+    for entry in scene_list:
+        if not isinstance(entry, dict):
+            continue
+        page = entry.get("page", "?")
+        subject = str(entry.get("subject", "") or "")
+        cls = normalize_chore_class(subject)
+        if cls is None:
+            continue
+        by_class.setdefault(cls, []).append(f"page {page}: {subject[:60]}")
+    dupes = {k: v for k, v in by_class.items() if len(v) >= 2}
+    if dupes:
+        parts = [f"{cls} → {'; '.join(pages)}" for cls, pages in sorted(dupes.items())]
+        rep.add(
+            "chore_class_dupe",
+            "FAIL",
+            "same chore/tool class twice in book: " + "; ".join(parts),
+        )
+    else:
+        n = sum(1 for v in by_class.values() if v)
+        rep.add(
+            "chore_class_dupe",
+            "PASS",
+            f"{n} chore-class page(s), all unique classes",
+        )
+    reports.append(rep)
+    return rep
+
+
+def load_scene_list(path: Path) -> list[dict[str, Any]]:
+    raw = path.read_text(encoding="utf-8")
+    data: Any
+    if path.suffix.lower() in {".yaml", ".yml"}:
+        if yaml is None:
+            raise RuntimeError("PyYAML required for --scene-list YAML files")
+        data = yaml.safe_load(raw)
+    else:
+        data = json.loads(raw)
+        # Allow YAML-looking .json mistake: if string, try yaml
+        if isinstance(data, str) and yaml is not None:
+            data = yaml.safe_load(data)
+    if isinstance(data, dict) and "pages" in data:
+        data = data["pages"]
+    if not isinstance(data, list):
+        raise ValueError("--scene-list must be a JSON/YAML list of {page, subject} objects")
+    out: list[dict[str, Any]] = []
+    for item in data:
+        if isinstance(item, dict) and "subject" in item:
+            out.append(item)
+        elif isinstance(item, str):
+            out.append({"page": len(out) + 1, "subject": item})
+        else:
+            raise ValueError(f"invalid scene-list entry: {item!r}")
+    return out
+
+
 def qa_image(
     path: Path,
     *,
     scene: str | None = None,
     prior_scenes: Sequence[str] | None = None,
+    skip_eyes: bool = False,
 ) -> FileReport:
     rep = FileReport(str(path))
     try:
@@ -428,6 +703,7 @@ def qa_image(
     check_solid_fills(rep, gray)
     check_wire_grid(rep, gray)
     check_hairlines(rep, gray)
+    check_eyes_pupils(rep, gray, skip=skip_eyes)
     check_near_dupe(rep, scene or path.stem, prior_scenes)
     return rep
 
@@ -753,6 +1029,156 @@ def check_barcode_zone(rep: FileReport, cover_path: Path) -> None:
         )
 
 
+def _page_num_corner_crops(im: Image.Image) -> list[Image.Image]:
+    """Bottom-center + four corner crops where page numbers are usually drawn."""
+    w, h = im.size
+    cw = max(8, int(w * PAGE_NUM_CORNER_FRAC))
+    ch = max(8, int(h * PAGE_NUM_CORNER_FRAC))
+    crops = [
+        im.crop((0, 0, cw, ch)),
+        im.crop((w - cw, 0, w, ch)),
+        im.crop((0, h - ch, cw, h)),
+        im.crop((w - cw, h - ch, w, h)),
+        im.crop((w // 2 - cw, h - ch, w // 2 + cw, h)),  # bottom center
+    ]
+    return crops
+
+
+def _corner_has_digit_like_ink(gray: np.ndarray) -> bool:
+    """Heuristic: small dark CCs with digit-like aspect (no OCR)."""
+    ink = gray < 128
+    if int(ink.sum()) < 8:
+        return False
+    h, w = gray.shape
+    u8 = (ink.astype(np.uint8) * 255)
+    if cv2 is not None:
+        n, _, stats, _ = cv2.connectedComponentsWithStats(u8, connectivity=8)
+        for i in range(1, n):
+            area = int(stats[i, cv2.CC_STAT_AREA])
+            bw = int(stats[i, cv2.CC_STAT_WIDTH])
+            bh = int(stats[i, cv2.CC_STAT_HEIGHT])
+            if area < 12 or area > (h * w) * 0.35:
+                continue
+            # Digits are taller than wide-ish, not huge bars
+            if bh < 6 or bw < 3:
+                continue
+            if bh > h * 0.9 or bw > w * 0.85:
+                continue
+            aspect = bh / max(1, bw)
+            if 0.8 <= aspect <= 4.5:
+                return True
+        return False
+    # Fallback: any non-trivial dark ink in corner counts as weak signal
+    return int(ink.sum()) >= 20
+
+
+def check_page_numbers(
+    rep: FileReport,
+    reader: Any,
+    path: Path,
+    *,
+    front_matter: int,
+) -> None:
+    """
+    Hard FAIL if interior sample pages have no detectable page numbers.
+
+    Prefers pdf2image raster of corners (drawn numerals). Falls back to
+    extractable text digits. Dependency: optional pdf2image + poppler
+    (documented in THRESHOLDS.md / requirements.txt).
+    """
+    n = len(reader.pages)
+    if n == 0:
+        rep.add("page_numbers", "FAIL", "PDF has no pages")
+        return
+
+    # Sample interior content pages (skip pure front-matter when possible)
+    start = min(front_matter, max(0, n - 1))
+    candidates = list(range(start, n))
+    if len(candidates) < 3:
+        candidates = list(range(n))
+    step = max(1, len(candidates) // PAGE_NUM_SAMPLE_MAX)
+    sample_idxs = sorted(set(candidates[::step][:PAGE_NUM_SAMPLE_MAX]))
+    if n - 1 not in sample_idxs:
+        sample_idxs.append(n - 1)
+
+    text_hits = 0
+    # Footer-like page numbers: a line that is only 1–3 digits (optional spaces),
+    # not body text that happens to contain a number.
+    footer_num_re = re.compile(r"(?m)^\s*\d{1,3}\s*$")
+    for i in sample_idxs:
+        try:
+            t = reader.pages[i].extract_text() or ""
+        except Exception:
+            t = ""
+        if footer_num_re.search(t):
+            text_hits += 1
+            continue
+        # Also accept a trailing short numeric token on the last non-empty line
+        lines = [ln.strip() for ln in t.splitlines() if ln.strip()]
+        if lines and re.fullmatch(r"\d{1,3}", lines[-1]):
+            text_hits += 1
+
+    raster_hits = 0
+    raster_note = ""
+    try:
+        from pdf2image import convert_from_path  # type: ignore
+
+        try:
+            # 150 DPI enough for numeral blobs; 1-indexed pages for pdf2image
+            for i in sample_idxs:
+                images = convert_from_path(
+                    str(path),
+                    dpi=150,
+                    first_page=i + 1,
+                    last_page=i + 1,
+                )
+                if not images:
+                    continue
+                for crop in _page_num_corner_crops(images[0]):
+                    g = np.array(crop.convert("L"))
+                    if _corner_has_digit_like_ink(g):
+                        raster_hits += 1
+                        break
+            raster_note = f"pdf2image corner hits={raster_hits}/{len(sample_idxs)}"
+        except Exception as e:
+            raster_note = f"pdf2image render failed: {e}"
+    except ImportError:
+        raster_note = (
+            "pdf2image not installed (optional; needs poppler) — "
+            "drawn numerals in corners cannot be raster-checked"
+        )
+
+    # Pass if either text or raster finds numbers on ≥2 sample pages,
+    # or ≥1 when the book is tiny.
+    need = 2 if len(sample_idxs) >= 2 else 1
+    if text_hits >= need or raster_hits >= need:
+        rep.add(
+            "page_numbers",
+            "PASS",
+            f"text_digit_pages={text_hits}, {raster_note}; samples={ [i+1 for i in sample_idxs] }",
+        )
+        return
+
+    # Single-method weak signal: still fail hard — teammates need reliable numbers
+    if text_hits == 0 and raster_hits == 0:
+        rep.add(
+            "page_numbers",
+            "FAIL",
+            "no detectable page numbers on sample pages "
+            f"(text_digit_pages=0, {raster_note}). "
+            "Interior package must show page numbers; install pdf2image+poppler "
+            "to detect drawn numerals, or embed extractable page-number text",
+        )
+    else:
+        rep.add(
+            "page_numbers",
+            "FAIL",
+            f"insufficient page-number evidence (text_digit_pages={text_hits}, "
+            f"{raster_note}; need ≥{need} sample hits). "
+            "Ensure every interior page shows a clear page number",
+        )
+
+
 def qa_interior_pdf(
     path: Path,
     *,
@@ -780,6 +1206,7 @@ def qa_interior_pdf(
     check_author(rep, reader, author_text)
     check_page_size(rep, reader)
     check_page_count_layout(rep, reader, front_matter=front_matter, designs=designs)
+    check_page_numbers(rep, reader, path, front_matter=front_matter)
     return rep
 
 
@@ -817,6 +1244,21 @@ def qa_cover_pdf(
 # CLI
 # ---------------------------------------------------------------------------
 
+def _scene_for_path(path: Path, scene_by_page: dict[Any, str] | None) -> str | None:
+    if not scene_by_page:
+        return None
+    stem = path.stem
+    # page_001 / page-001 / 001
+    m = re.search(r"(\d+)", stem)
+    if m:
+        num = int(m.group(1))
+        if num in scene_by_page:
+            return scene_by_page[num]
+        if str(num) in scene_by_page:
+            return scene_by_page[str(num)]
+    return scene_by_page.get(stem)
+
+
 def cmd_images(args: argparse.Namespace) -> int:
     root = Path(args.path)
     if not root.exists():
@@ -828,11 +1270,47 @@ def cmd_images(args: argparse.Namespace) -> int:
         if not isinstance(prior, list):
             print("ERROR: --prior-scenes must be a JSON list of strings", file=sys.stderr)
             return 1
+    scene_list = None
+    scene_by_page: dict[Any, str] | None = None
+    if args.scene_list:
+        try:
+            scene_list = load_scene_list(Path(args.scene_list))
+        except Exception as e:
+            print(f"ERROR: --scene-list: {e}", file=sys.stderr)
+            return 1
+        scene_by_page = {}
+        for entry in scene_list:
+            page = entry.get("page")
+            subj = str(entry.get("subject", ""))
+            if page is not None:
+                scene_by_page[page] = subj
+                try:
+                    scene_by_page[int(page)] = subj
+                except (TypeError, ValueError):
+                    pass
+        # Also feed subjects into prior-scenes for near-dupe if not provided
+        if prior is None:
+            prior = [str(e.get("subject", "")) for e in scene_list if e.get("subject")]
     paths = iter_images(root)
     if not paths:
         print(f"ERROR: no images under {root}", file=sys.stderr)
         return 1
-    reports = [qa_image(p, prior_scenes=prior) for p in paths]
+    reports: list[FileReport] = []
+    for p in paths:
+        scene = _scene_for_path(p, scene_by_page)
+        # For near-dupe, exclude this page's own subject from prior
+        page_prior = prior
+        if prior is not None and scene:
+            page_prior = [s for s in prior if s != scene]
+        reports.append(
+            qa_image(
+                p,
+                scene=scene or p.stem,
+                prior_scenes=page_prior,
+                skip_eyes=bool(args.skip_eyes),
+            )
+        )
+    check_chore_class_dupes(reports, scene_list)
     return _print_report(reports, f"IMAGE QA ({len(reports)} file(s))")
 
 
@@ -888,7 +1366,18 @@ def build_parser() -> argparse.ArgumentParser:
     pi.add_argument("path", help="Image file or directory")
     pi.add_argument(
         "--prior-scenes",
-        help="Optional JSON list of prior scene strings (near-dupe soft FLAG only)",
+        help="Optional JSON list of prior scene strings (near-dupe soft FLAG; "
+        "hard FAIL when chore-class matches)",
+    )
+    pi.add_argument(
+        "--scene-list",
+        help="JSON/YAML list of {page, subject} for the book; enables chore-class "
+        "duplicate hard FAIL and per-page scene labels",
+    )
+    pi.add_argument(
+        "--skip-eyes",
+        action="store_true",
+        help="Disable eyes/pupils heuristic hard FAIL (default: ON / best-effort)",
     )
     pi.set_defaults(func=cmd_images)
 

@@ -18,14 +18,20 @@ See `qa_checks/THRESHOLDS.md`. Includes:
 - Pure 1-bit / no mid-gray
 - No ink in **0.5″** margin
 - Solid black fills, wire-grid density, hairline strokes
+- **Eyes / pupils** heuristic (default ON; `--skip-eyes` to disable)
+- **Chore-class uniqueness** when `--scene-list` is provided (same tool/action class twice → FAIL)
+- Interior PDF **page numbers** required at package QA (`qa_gate.py pdf`)
 
-Out of hard gate: pose correctness, busy backgrounds, Amazon uniqueness.
+Out of hard gate: pose correctness, busy backgrounds, Amazon uniqueness (generic near-dupe remains soft unless chore-class match).
 
 ## CLI
 
 ```bash
 # Standalone after a batch is written
 python scripts/page_factory_exit_gate.py output/some-book/images
+python scripts/page_factory_exit_gate.py output/some-book/images \
+  --scene-list scenes.yaml --prior-scenes prior.json
+# --skip-eyes   # escape hatch for pupils heuristic only
 
 # Built into main generate path (default on)
 python main.py --pages 8 --theme ... --dry-run

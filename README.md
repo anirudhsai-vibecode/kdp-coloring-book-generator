@@ -186,14 +186,16 @@ python scripts/page_factory_exit_gate.py path/to/images_dir
 ```
 
 ```bash
-# Image pages (PNG/JPG) — canvas, pure B&W, margins, solid fills, wire-grid, hairlines
+# Image pages (PNG/JPG) — canvas, pure B&W, margins, solid fills, wire-grid,
+# hairlines, eyes/pupils heuristic (default ON; --skip-eyes to disable)
 python scripts/qa_gate.py images path/to/dir
 python scripts/qa_gate.py images path/to/page.png
 
-# Optional near-dupe soft FLAG (never hard-FAIL alone)
+# Optional near-dupe soft FLAG; chore-class hard FAIL with --scene-list
 python scripts/qa_gate.py images path/to/dir --prior-scenes prior_scenes.json
+python scripts/qa_gate.py images path/to/dir --scene-list scenes.yaml
 
-# PDF package — interior and/or cover
+# PDF package — interior and/or cover (page numbers hard FAIL on interior)
 python scripts/qa_gate.py pdf --interior output/.../interior.pdf \
   --front-matter-pages 4 --designs 32
 
@@ -202,7 +204,7 @@ python scripts/qa_gate.py pdf --interior output/.../interior.pdf \
   --author-text metadata_author.txt
 ```
 
-Expected interior layout for **32 designs**: `[N front-matter] + [art, blank]×32` (default N=4 → **68** pages, even). Cover spine ≈ `pages × 0.002252` (white B&W); wrap H ≈ 11.25″. Optional barcode-zone raster needs `pdf2image` + poppler (skipped with a TODO note if missing).
+Expected interior layout for **32 designs**: `[N front-matter] + [art, blank]×32` (default N=4 → **68** pages, even). Cover spine ≈ `pages × 0.002252` (white B&W); wrap H ≈ 11.25″. Optional barcode-zone + page-number corner raster needs `pdf2image` + poppler (page numbers still checked via extractable text; drawn-only numerals FAIL until pdf2image is available).
 
 ## Project layout
 
