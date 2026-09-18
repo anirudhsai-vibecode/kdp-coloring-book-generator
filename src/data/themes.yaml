@@ -1,0 +1,649 @@
+# Age-appropriate (3–7) coloring book themes.
+# NO trademarked characters (no Disney, Pokémon, Peppa Pig, etc.).
+
+animals:
+  display_name: "Animals"
+  title_templates:
+    - "Cute {theme} Coloring Book for Kids"
+    - "My First {theme} Coloring Adventure"
+    - "Happy {theme} to Color"
+    - "{theme} Friends Coloring Book"
+  subjects:
+    - fluffy bunny hopping in a meadow
+    - friendly lion cub sitting proudly
+    - playful puppy with a ball
+    - sleepy kitten curled up
+    - elephant calf with big ears
+    - giraffe stretching its long neck
+    - zebra with bold stripes
+    - panda munching bamboo
+    - fox sitting under a tree
+    - hedgehog rolled in a ball
+    - squirrel holding an acorn
+    - raccoon peeking from a bush
+    - kangaroo with a joey
+    - koala hugging a tree
+    - bear cub waving hello
+    - deer with tiny antlers
+    - hippo in a puddle
+    - monkey swinging on a vine
+    - owl perched on a branch
+    - penguin waddling on ice
+    - turtle walking slowly
+    - frog on a lily pad
+    - mouse with cheese
+    - goat standing on a rock
+    - sheep with fluffy wool
+
+farm:
+  display_name: "Farm"
+  title_templates:
+    - "Farm Friends Coloring Book"
+    - "My Little Farm Coloring Pages"
+    - "Happy Farm Animals to Color"
+    - "{theme} Day Coloring Fun"
+  subjects:
+    - friendly cow in a grassy field
+    - cheerful pig in a muddy puddle
+    - rooster crowing at sunrise
+    - hen with fluffy chicks
+    - horse standing by a fence
+    - duck swimming in a pond
+    - goat chewing grass
+    - sheep with curly wool
+    - barn cat sitting on a barrel
+    - farm dog watching the yard
+    - tractor in a sunny field
+    - red barn with open doors
+    - hay bale with a mouse
+    - farmer's watering can and boots
+    - chicken coop with a ladder
+    - pony with a simple bridle
+    - calf next to its mother
+    - geese walking in a line
+    - scarecrow in a cornfield
+    - apple tree with ripe fruit
+    - wooden fence and gate
+    - milk pail and stool
+    - sunflower near the barn
+    - ducklings following mama duck
+    - windmill on the hill
+
+ocean:
+  display_name: "Ocean"
+  title_templates:
+    - "Ocean Friends Coloring Book"
+    - "Under the Sea Coloring Adventure"
+    - "Happy Ocean Creatures to Color"
+    - "Little {theme} Coloring Book"
+  subjects:
+    - smiling fish with big fins
+    - friendly dolphin leaping
+    - cute sea turtle swimming
+    - starfish on the sand
+    - octopus with curly tentacles
+    - seahorse floating gently
+    - whale with a water spout
+    - crab with round claws
+    - jellyfish with soft tentacles
+    - clownfish near coral
+    - shark with a friendly smile
+    - lobster on the seabed
+    - coral reef scene simple
+    - seashell on the beach
+    - hermit crab in a shell
+    - ray gliding over sand
+    - seal balancing a ball
+    - puffin standing on a rock
+    - lighthouse by the shore
+    - sailboat on calm waves
+    - treasure chest with pearls
+    - seaweed and bubbles
+    - pelican on a pier
+    - sandcastle with a flag
+    - school of small fish swimming
+
+dinosaurs:
+  display_name: "Dinosaurs"
+  title_templates:
+    - "Cute Dinosaurs Coloring Book"
+    - "My First Dino Coloring Adventure"
+    - "Happy Dinosaur Friends to Color"
+    - "Little {theme} Coloring Fun"
+  subjects:
+    - friendly T-rex with tiny arms smiling
+    - long-necked sauropod eating leaves
+    - triceratops with three horns
+    - stegosaurus with back plates
+    - flying pterodactyl in the sky
+    - baby dinosaur in an egg
+    - dinosaur nest with eggs
+    - spiky ankylosaurus
+    - dinosaur footprint path
+    - volcano in the distance simple
+    - dinosaur eating a fern
+    - two dinos playing together
+    - dinosaur under a palm tree
+    - swimming plesiosaur
+    - dinosaur with a flower
+    - round chubby dino sitting
+    - dinosaur waving hello
+    - dino family walking
+    - dinosaur and a butterfly
+    - cave with a sleeping dino
+    - dinosaur chasing a butterfly gently
+    - tiny microraptor with feathers
+    - dinosaur on a hill
+    - dino with a balloon
+    - prehistoric plant and dino
+
+vehicles:
+  display_name: "Vehicles"
+  title_templates:
+    - "Cool Vehicles Coloring Book"
+    - "Cars Trucks and More to Color"
+    - "My First Vehicles Coloring Book"
+    - "Happy {theme} Coloring Fun"
+  subjects:
+    - smiling car with round headlights
+    - big dump truck carrying dirt
+    - fire truck with a ladder
+    - school bus with windows
+    - police car with a light
+    - airplane flying in clouds
+    - helicopter with spinning blades
+    - train engine with a chimney
+    - sailboat on the water
+    - bicycle with a basket
+    - motorcycle with round wheels
+    - bulldozer pushing dirt
+    - cement mixer truck
+    - ambulance with a cross
+    - rocket ship simple
+    - hot air balloon in the sky
+    - subway train car
+    - tractor with big wheels
+    - tow truck pulling a car
+    - scooter with a helmet nearby
+    - canoe with paddles
+    - race car with a number
+    - delivery van
+    - ice cream truck
+    - taxi cab
+
+alphabet:
+  display_name: "Alphabet"
+  title_templates:
+    - "ABC Coloring Book for Kids"
+    - "My First Alphabet Coloring Book"
+    - "Letters A to Z Coloring Fun"
+    - "Happy {theme} Adventure"
+  subjects:
+    - letter A with an apple
+    - letter B with a ball
+    - letter C with a cat
+    - letter D with a dog
+    - letter E with an elephant
+    - letter F with a fish
+    - letter G with a goat
+    - letter H with a hat
+    - letter I with an ice cream cone
+    - letter J with a jar
+    - letter K with a kite
+    - letter L with a leaf
+    - letter M with a moon
+    - letter N with a nest
+    - letter O with an orange
+    - letter P with a pencil
+    - letter Q with a queen crown simple
+    - letter R with a rainbow
+    - letter S with a sun
+    - letter T with a tree
+    - letter U with an umbrella
+    - letter V with a vase
+    - letter W with a whale
+    - letter X with a xylophone
+    - letter Y with a yo-yo
+    - letter Z with a zebra
+
+numbers:
+  display_name: "Numbers"
+  title_templates:
+    - "Numbers Coloring Book for Kids"
+    - "Counting 1 to 10 Coloring Fun"
+    - "My First Numbers Coloring Book"
+    - "Happy {theme} Adventure"
+  subjects:
+    - number 1 with one balloon
+    - number 2 with two apples
+    - number 3 with three stars
+    - number 4 with four flowers
+    - number 5 with five ducks
+    - number 6 with six bees
+    - number 7 with seven fish
+    - number 8 with eight butterflies
+    - number 9 with nine clouds
+    - number 10 with ten dots
+    - number 0 with an empty circle
+    - counting blocks stacked
+    - abacus with beads
+    - clock showing a simple time
+    - fingers counting to five
+    - two birds on a wire
+    - three birthday candles
+    - four toy cars lined up
+    - five happy faces
+    - dice showing six
+    - seven musical notes
+    - eight petals on a flower
+    - nine ladybugs
+    - ten toes on feet simple
+    - number train with cars
+
+seasons:
+  display_name: "Seasons"
+  title_templates:
+    - "Four Seasons Coloring Book"
+    - "Spring Summer Fall Winter to Color"
+    - "My Seasons Coloring Adventure"
+    - "Happy {theme} Coloring Fun"
+  subjects:
+    - spring flower blooming
+    - sunny summer beach umbrella
+    - autumn leaf falling
+    - winter snowman with scarf
+    - cherry blossom tree
+    - ice cream cone in summer
+    - pumpkin in fall
+    - snowflake crystal
+    - rain boots in a puddle
+    - kite flying in spring wind
+    - beach ball and sand
+    - acorn and oak leaf
+    - mitten and scarf
+    - tulips in a garden
+    - picnic basket under a tree
+    - maple leaf
+    - holly berry sprig
+    - butterfly in spring
+    - sun wearing sunglasses cute
+    - cloud raining gently
+    - bare winter tree
+    - nest with spring eggs
+    - watermelon slice
+    - haystack in autumn
+    - sled on a snowy hill
+
+space:
+  display_name: "Space"
+  title_templates:
+    - "Simple Space Coloring Book"
+    - "Stars and Planets to Color"
+    - "My First Space Adventure"
+    - "Happy Little {theme} Coloring Book"
+  subjects:
+    - smiling moon with craters
+    - friendly rocket ship
+    - planet with rings
+    - twinkling star
+    - cute astronaut floating
+    - flying saucer simple
+    - comet with a tail
+    - earth with continents simple
+    - satellite with panels
+    - alien with big eyes friendly
+    - constellation of stars
+    - space station simple
+    - telescope pointing up
+    - cratered moon surface
+    - sun with rays
+    - galaxy swirl simple
+    - astronaut planting a flag
+    - planet with moons
+    - shooting star
+    - space helmet close-up
+    - robot helper in space
+    - asteroid chunk
+    - nebula cloud soft outline
+    - lunar rover
+    - night sky with stars
+
+insects:
+  display_name: "Insects"
+  title_templates:
+    - "Cute Bugs Coloring Book"
+    - "Little Insects to Color"
+    - "Happy Bug Friends Coloring Book"
+    - "My First {theme} Coloring Fun"
+  subjects:
+    - friendly ladybug on a leaf
+    - butterfly with big wings
+    - bee buzzing near a flower
+    - caterpillar on a stem
+    - dragonfly over a pond
+    - ant carrying a crumb
+    - grasshopper on grass
+    - snail with a spiral shell
+    - firefly glowing
+    - beetle with spots
+    - praying mantis simple
+    - moth with soft wings
+    - spider on a web simple cute
+    - cricket on a rock
+    - worm in the soil
+    - fly with round eyes
+    - mosquito cute cartoon
+    - walking stick insect
+    - cicada on a tree
+    - butterfly cocoon
+    - bee hive simple
+    - ants in a line
+    - beetle under a mushroom
+    - butterfly on a daisy
+    - ladybug flying
+
+birds:
+  display_name: "Birds"
+  title_templates:
+    - "Happy Birds Coloring Book"
+    - "Little Birds to Color"
+    - "My First Birds Coloring Adventure"
+    - "{theme} Friends Coloring Fun"
+  subjects:
+    - robin with a round belly
+    - owl with big eyes
+    - flamingo standing on one leg
+    - penguin on ice
+    - parrot on a perch
+    - duck swimming
+    - eagle soaring simple
+    - hummingbird near a flower
+    - swan on a lake
+    - chick hatching from egg
+    - nest with three eggs
+    - peacock with fan feathers
+    - woodpecker on a tree
+    - seagull by the shore
+    - toucan with a big beak
+    - sparrow on a branch
+    - crow sitting on a fence
+    - heron in shallow water
+    - birdhouse with a bird
+    - flock of birds flying V
+    - ostrich with long neck
+    - kiwi bird cute
+    - bluebird singing
+    - pelican with a pouch
+    - chickadee on a twig
+
+food:
+  display_name: "Food"
+  title_templates:
+    - "Yummy Food Coloring Book"
+    - "Cute Treats to Color"
+    - "My First Food Coloring Fun"
+    - "Happy {theme} Friends"
+  subjects:
+    - smiling apple with a leaf
+    - banana with a peel tip
+    - ice cream cone with scoop
+    - pizza slice with toppings
+    - cupcake with frosting swirl
+    - watermelon slice
+    - carrot with leafy top
+    - strawberry with seeds
+    - donut with sprinkles outline
+    - sandwich stacked
+    - cookie with chocolate chips
+    - bunch of grapes
+    - orange with leaves
+    - popcorn bucket
+    - pancake stack with syrup drip
+    - cheese wedge with holes
+    - broccoli floret cute
+    - taco standing up
+    - muffin in a wrapper
+    - pear with a stem
+    - lollipop swirl
+    - corn on the cob
+    - hot dog in a bun
+    - bowl of cereal and spoon
+    - cherry pair
+
+pets:
+  display_name: "Pets"
+  title_templates:
+    - "Cute Pets Coloring Book"
+    - "My Pet Friends to Color"
+    - "Happy Pets Coloring Adventure"
+    - "Little {theme} Coloring Fun"
+  subjects:
+    - puppy with a collar
+    - kitten with a ball of yarn
+    - goldfish in a round bowl
+    - hamster in a wheel
+    - bunny in a hutch
+    - guinea pig eating lettuce
+    - parrot on a stand
+    - turtle in a tank
+    - puppy chewing a toy
+    - cat in a cardboard box
+    - dog with a bone
+    - kitten peeking from a basket
+    - fish with bubbles
+    - lizard on a rock
+    - ferret playing
+    - chinchilla cute
+    - bird in a cage door open
+    - puppy and kitten together
+    - dog house with a dog
+    - cat scratching post
+    - pet bed with a sleeping dog
+    - leash and collar set
+    - treat jar
+    - hamster with sunflower seed
+    - bunny with a carrot
+
+jungle:
+  display_name: "Jungle"
+  title_templates:
+    - "Jungle Friends Coloring Book"
+    - "Wild Jungle Adventure to Color"
+    - "My First Jungle Coloring Book"
+    - "Happy {theme} Creatures"
+  subjects:
+    - monkey swinging on a vine
+    - tiger cub sitting
+    - toucan on a branch
+    - snake coiled on a tree cute
+    - frog on a big leaf
+    - butterfly in the jungle
+    - leopard with spots
+    - gorilla sitting peacefully
+    - parrot flying
+    - jungle tree with hanging vines
+    - crocodile by the river cute
+    - anteater with long snout
+    - sloth hanging upside down
+    - macaw with spread wings
+    - jaguar cub
+    - tropical flower
+    - banana bunch on a tree
+    - waterfall simple
+    - iguana on a log
+    - jungle path with footprints
+    - chimpanzee smiling
+    - exotic bird nest
+    - palm tree
+    - jungle beetle
+    - capybara by water
+
+arctic:
+  display_name: "Arctic"
+  title_templates:
+    - "Arctic Animals Coloring Book"
+    - "Snowy Friends to Color"
+    - "My First Arctic Adventure"
+    - "Happy {theme} Animals"
+  subjects:
+    - polar bear on ice
+    - penguin family
+    - arctic fox in snow
+    - seal on an ice floe
+    - walrus with tusks
+    - snowy owl
+    - reindeer with antlers
+    - beluga whale
+    - arctic hare
+    - husky dog in snow
+    - igloo simple
+    - iceberg floating
+    - snowflake large
+    - arctic wolf cute
+    - puffin on a cliff
+    - narwhal with a tusk
+    - sled dog team simple
+    - northern lights outline soft
+    - ice cave entrance
+    - baby seal
+    - polar bear cub rolling
+    - snowman in arctic
+    - mittens and boots
+    - fishing hole in ice
+    - moose in winter
+
+construction:
+  display_name: "Construction"
+  title_templates:
+    - "Construction Vehicles Coloring Book"
+    - "Big Diggers to Color"
+    - "My First Construction Site Fun"
+    - "Happy {theme} Machines"
+  subjects:
+    - excavator digging
+    - dump truck full of dirt
+    - bulldozer pushing rocks
+    - crane lifting a beam
+    - cement mixer
+    - forklift carrying a box
+    - steamroller flattening road
+    - construction worker hard hat simple
+    - traffic cone
+    - unfinished building frame
+    - wheelbarrow with bricks
+    - jackhammer cute machine
+    - loader scooping gravel
+    - cherry picker lift
+    - toolbox open
+    - caution sign
+    - pile of bricks
+    - scaffolding simple
+    - backhoe
+    - road grader
+    - truck with lumber
+    - hard hat and gloves
+    - blueprint roll
+    - fence around a site
+    - digger with a smile on cab
+
+garden:
+  display_name: "Garden"
+  title_templates:
+    - "Garden Friends Coloring Book"
+    - "Flowers and Bugs to Color"
+    - "My Little Garden Adventure"
+    - "Happy {theme} Coloring Fun"
+  subjects:
+    - sunflower tall and bright
+    - watering can pouring water
+    - rose bloom simple
+    - tulip in soil
+    - gardener gloves and trowel
+    - vegetable patch carrots
+    - bee on a blossom
+    - birdbath with a bird
+    - butterfly bush
+    - tomato plant
+    - wheelbarrow of flowers
+    - pot of herbs
+    - mushroom cluster
+    - ladybug on a petal
+    - garden gnome cute original
+    - seed packet
+    - fence with climbing vine
+    - daisy chain
+    - apple tree in blossom
+    - scarecrow in veggies
+    - compost bin cute
+    - snail in the garden
+    - hose coiled
+    - flower bed rows
+    - picnic blanket in garden
+
+weather:
+  display_name: "Weather"
+  title_templates:
+    - "Weather Fun Coloring Book"
+    - "Sun Rain and Clouds to Color"
+    - "My First Weather Adventure"
+    - "Happy {theme} Days"
+  subjects:
+    - smiling sun with rays
+    - fluffy cloud
+    - rain cloud with drops
+    - rainbow arc
+    - snowflake
+    - lightning bolt cute
+    - wind blowing leaves
+    - umbrella in the rain
+    - thermometer simple
+    - tornado swirl cute soft
+    - foggy morning tree
+    - hailstones falling
+    - weather vane
+    - kite in strong wind
+    - puddle with boots
+    - sunny and cloudy mix
+    - moon and stars night
+    - stormy wave
+    - frost on a window
+    - hot summer sun
+    - chilly snow cloud
+    - rain boots pair
+    - weather map simple icons
+    - windmill spinning
+    - sunshine through clouds
+
+sports:
+  display_name: "Sports"
+  title_templates:
+    - "Sports Fun Coloring Book"
+    - "Play Ball Coloring Adventure"
+    - "My First Sports Coloring Book"
+    - "Happy {theme} Days"
+  subjects:
+    - soccer ball
+    - basketball and hoop
+    - baseball and bat
+    - tennis racket and ball
+    - football
+    - jump rope
+    - bicycle for kids
+    - swimming goggles and float
+    - skateboard
+    - hockey stick and puck
+    - volleyball
+    - bowling pin and ball
+    - golf club and ball
+    - trophy cup
+    - medal on a ribbon
+    - kid running simple silhouette outline
+    - hula hoop
+    - frisbee flying
+    - ping pong paddle
+    - roller skates
+    - badminton racket
+    - yoga mat rolled
+    - whistle
+    - sports water bottle
+    - team jersey on a hanger

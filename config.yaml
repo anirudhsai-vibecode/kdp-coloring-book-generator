@@ -1,0 +1,69 @@
+# Default configuration for KDP Coloring Book Generator
+
+page:
+  width_in: 8.5
+  height_in: 11.0
+  # Safe margins (inches) — keep art away from trim edge
+  margin_in: 0.5
+  # Bleed for cover (inches); KDP typically wants 0.125"
+  bleed_in: 0.125
+
+defaults:
+  pages: 50
+  author: "Your Name Here"
+  paper: "white"  # KDP B&W: white or cream
+  # Spine width formula (inches per page) for standard KDP B&W paper:
+  #   white: 0.002252 * page_count
+  #   cream: 0.0025 * page_count
+  # Documented by Amazon KDP paperback cover calculator guidance.
+  spine_factor_white: 0.002252
+  spine_factor_cream: 0.0025
+
+image:
+  # Interior art rendered at this pixel size (approx 150 DPI for 7.5x10 art area)
+  width_px: 1125
+  height_px: 1500
+  retries: 6
+  backoff_base_sec: 2.0
+  # Prefer cloudflare when CLOUDFLARE_* env set (or set provider: cloudflare).
+  # Options: cloudflare | pollinations | huggingface
+  provider: cloudflare
+  # FLUX.1-schnell steps on Workers AI (1–8; default 4)
+  cloudflare_steps: 8
+
+generation:
+  # Default style (user-approved elephant prompt template). Subject is injected by build_prompt().
+  # Cloudflare FLUX has no separate negative-prompt field — avoids are folded into the prompt.
+  prompt_suffix: >
+    Use bold, smooth, continuous black outlines on a pure white background.
+    Simple, cute, friendly appearance for kids ages 4-8. Symmetrical and anatomically clean,
+    with well-proportioned features. Coloring-book style: Use uniform thick black outlines
+    with clean enclosed shapes designed specifically for children to color. Clean vector-like
+    outlines, simple shapes, large open areas for easy coloring, minimal interior details.
+    Remove all shading, gray areas, textures, cross-hatching, sketch marks and unnecessary details.
+    No overlapping or doubled outlines, no broken lines, no stray strokes, no random marks,
+    and no distorted body parts. Keep the subject centered with plenty of white space around it,
+    suitable for printing as a children's coloring-book page. High-quality printable
+    black-and-white line art, clean contours, polished coloring-book illustration, white background.
+    Original character only — no trademarked characters, no text, no watermark, no logo.
+  avoid_prompt: >
+    rough sketch, messy lines, scribbles, double outlines, stray lines, broken outlines,
+    overlapping lines, excessive details, shading, gray, shadows, hatching, cross-hatching,
+    realistic texture, distorted anatomy, malformed feet, extra limbs, extra toes,
+    asymmetrical face, cluttered background, cropped body, blurry lines, low resolution,
+    solid black fills, watercolor, 3d render, photorealistic
+  # Anatomy QC block appended by build_prompt() on every page (preserve pose/style; fix AI artifacts).
+  # Compact + kid-safe wording so intro+suffix+anatomy+Avoid fit Cloudflare FLUX's 2048-char limit
+  # and avoid intermittent NSFW false positives on words like "anatomical"/"body parts".
+  anatomy_check: >
+    ANATOMY CHECK: Preserve character, pose, composition, and cute kids coloring-book style.
+    Correct drawing mistakes and AI artifacts. Use the correct number of arms, legs, and other
+    features for the animal; remove any duplicate, extra, misplaced, or unfinished arms, hands,
+    legs, feet, fingers, toes, eyes, ears, tails, or horns. Every arm and leg must attach naturally;
+    joints, feet, hands, tail, and face should look structurally right. Nothing should pass through
+    or sit wrongly behind something else. Clean smooth continuous black outlines with consistent
+    thickness. Remove stray marks, accidental lines, duplicated contours, broken outlines, and
+    unnecessary details. Keep it simple for kids coloring with large clearly enclosed areas.
+    Do not add new features or decorative details; do not change the intended pose. Pure white
+    background, black line art only, no shading, gray, color, or texture. Final anatomy check
+    before generating.
