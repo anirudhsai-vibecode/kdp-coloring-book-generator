@@ -20,9 +20,9 @@ defaults:
   spine_factor_cream: 0.0025
 
 image:
-  # Interior art rendered at this pixel size (approx 150 DPI for 7.5x10 art area)
-  width_px: 1125
-  height_px: 1500
+  # Interior art rendered at this pixel size (300 DPI for 8.5×11 full page (print lock))
+  width_px: 2550
+  height_px: 3300
   retries: 6
   backoff_base_sec: 2.0
   # Prefer cloudflare when CLOUDFLARE_* env set (or set provider: cloudflare).
