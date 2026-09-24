@@ -95,12 +95,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--max-regen",
         type=int,
-        default=None,
+        default=3,
         metavar="N",
         help=(
-            "Advisory only: log a warning after N exit-gate FAILs on a page. "
-            "Never force-saves FAIL as final; never hard-stops. "
-            "Default unlimited regen until PASS. Hard pause = Cloudflare quota only."
+            "Hard cap of exit-gate FAIL regenerations per page (default 3). "
+            "After N FAILs, force-save the last attempt as the page final with a loud "
+            "WARNING and continue. Pass 0 for unlimited until PASS."
         ),
     )
     p.add_argument(
@@ -450,11 +450,12 @@ def generate_page_until_pass(
     theme_key: str,
     theme: dict,
 ) -> None:
-    """Regenerate until exit-gate PASS. Never copies FAIL as final after N tries.
+    """Generate a page until exit-gate PASS or the hard regen cap is reached.
 
     Raises CloudflarePausedError on CF quota exhaustion (all accounts).
-    Optional --max-regen is an advisory soft-warn threshold only (dump + continue);
-    hard pause is Cloudflare quota only.
+    A positive --max-regen hard-caps FAIL attempts; after the Nth FAIL, the
+    last attempt remains in ``out_img`` as the page final. ``0`` or ``None``
+    means unlimited attempts until PASS.
     """
     # Pre-check theme lock before spending neurons
     ok, reason = check_theme_subject(subject, theme_key=theme_key, theme=theme, cfg=cfg)
@@ -464,21 +465,11 @@ def generate_page_until_pass(
     attempt = 0
     while True:
         attempt += 1
-        soft_n = args.max_regen  # advisory warn only; never force-save or hard-stop
-        # AD FLOOR LOCK: regenerate until PASS. Pause only on CloudflarePausedError.
-        if soft_n is not None and attempt > soft_n and not args.skip_exit_gate:
-            logging.warning(
-                "Page %s exceeded advisory --max-regen=%s (attempt %s) — "
-                "continuing until PASS (no force-save; CF quota is the only hard pause)",
-                page_num,
-                soft_n,
-                attempt,
-            )
-
         logging.info(
-            "Page %s attempt %s (until PASS): %s",
+            "Page %s attempt %s (max_regen=%s): %s",
             page_num,
             attempt,
+            args.max_regen,
             subject,
         )
         try:
@@ -526,8 +517,20 @@ def generate_page_until_pass(
             reason=reason,
             subject=subject,
         )
+        max_regen = args.max_regen
+        if isinstance(max_regen, int) and max_regen > 0 and attempt >= max_regen:
+            logging.error(
+                "HARD max-regen=%s hit for page %s after %s FAIL(s) — "
+                "force-saving last attempt as page final to conserve Cloudflare quota",
+                max_regen,
+                page_num,
+                attempt,
+            )
+            # Keep out_img in place: the last FAIL is the forced page final.
+            return
+
         logging.warning(
-            "Exit gate FAIL page %s attempt %s — dumped %s; regenerating until PASS…",
+            "Exit gate FAIL page %s attempt %s — dumped %s; regenerating…",
             page_num,
             attempt,
             dump_path.name,
@@ -643,7 +646,7 @@ def main(argv: list[str] | None = None) -> int:
         args.pages,
         args.dry_run,
         args.seed,
-        args.max_regen if args.max_regen is not None else "unlimited",
+        args.max_regen if args.max_regen is not None else 0,
     )
     logging.info("Output: %s", book_dir)
     logging.info(

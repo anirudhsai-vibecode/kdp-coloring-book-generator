@@ -36,11 +36,11 @@ python scripts/page_factory_exit_gate.py output/some-book/images \
 # Built into main generate path (default on)
 python main.py --pages 8 --theme ... --dry-run --auto-approve
 # --skip-exit-gate   # escape hatch only
-# --max-regen N      # optional pause-and-ask after N FAILs (default: unlimited until PASS)
+# --max-regen N      # hard cap after N FAILs; force-save last FAIL (default: 3; 0 = unlimited until PASS)
 # --require-user-review (default) blocks packaging until USER_APPROVED.json
 ```
 
-`main.py` regenerates each page until the exit gate PASSes (never force-saves FAIL as final).
+`main.py` regenerates each page until the exit gate PASSes or the hard `--max-regen` cap is reached. With the default cap of 3, the last FAIL is force-saved as the page final after the third FAIL to conserve Cloudflare quota; `--max-regen 0` restores unlimited-until-PASS behavior.
 Every FAIL is copied to `failed_dump/page-NN-attempt-K.png`. On Cloudflare daily quota
 exhaustion (all accounts) → STATUS PAUSED. A final directory sweep runs before packaging.
 Exit code **1** means do not hand off to QA / resume after pause.
@@ -48,7 +48,7 @@ Exit code **1** means do not hand off to QA / resume after pause.
 
 ## AD FLOOR LOCKS (pipeline)
 
-1. **Until PASS** — regenerate each page until exit-gate PASS. Never force-save a FAIL as final. Hard pause only on Cloudflare quota exhaustion (all configured accounts).
+1. **Hard regen cap** — default `--max-regen 3` caps exit-gate FAIL regenerations per page; after N FAILs, force-save the last FAIL as the page final to conserve Cloudflare quota and continue. `--max-regen 0` means unlimited until PASS.
 2. **Cloudflare only** — no Pollinations/HF fallback. Up to 3 CF account slots (`CLOUDFLARE_ACCOUNT_ID` / `_2` / `_3`). On HTTP 429 code 4006, rotate to the next account.
 3. **failed_dump/** — every exit-gate FAIL is saved as `page-NN-attempt-K.png` (+ `manifest.json`). After all pages PASS, packaging waits for user/AD review (`USER_APPROVED.json` or `--auto-approve`).
 4. **Theme lock** — subjects/props must stay in-theme (e.g. pets rejects garden/jar-as-main-subject). Hard fail before final.
