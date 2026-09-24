@@ -25,15 +25,28 @@ image:
   height_px: 3300
   retries: 6
   backoff_base_sec: 2.0
-  # Prefer cloudflare when CLOUDFLARE_* env set (or set provider: cloudflare).
-  # Options: cloudflare | pollinations | huggingface
+  # Live generation is Cloudflare-only (multi-account rotation on 429/4006).
+  # Pollinations / Hugging Face are NOT used as generation fallback.
   provider: cloudflare
   # FLUX.1-schnell steps on Workers AI (1–8; default 4)
   cloudflare_steps: 8
 
+# Theme lock: fold constraints into build_prompt(); reject off-theme subjects pre-gen.
+# Themes whose key/display contain "pet" always get the built-in pets lock.
+theme_lock:
+  pets:
+    constraint: >
+      THEME LOCK (pets): The main subject MUST be a pet animal
+      (dog, cat, hamster, fish, bird pet, rabbit, guinea pig, turtle, etc.)
+      or a clearly pet-related scene with that pet visible.
+      Do NOT make garden chores, farm tools, or jars the main subject
+      unless the pet is clearly present and primary.
+
 generation:
   # Default style (user-approved elephant prompt template). Subject is injected by build_prompt().
   # Cloudflare FLUX has no separate negative-prompt field — avoids are folded into the prompt.
+  # Optional theme_constraint is appended for all themes; pet themes also get theme_lock.pets.
+  theme_constraint: ""
   prompt_suffix: >
     Use bold, smooth, continuous black outlines on a pure white background.
     Simple, cute, friendly appearance for kids ages 4-8. Symmetrical and anatomically clean,

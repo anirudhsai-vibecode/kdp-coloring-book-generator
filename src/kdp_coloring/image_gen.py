@@ -1,4 +1,9 @@
-"""Image generation: Cloudflare FLUX, Pollinations, optional HF, + outline post-process."""
+"""Image generation: Cloudflare FLUX (multi-account) + outline post-process.
+
+Live generation is Cloudflare Workers AI only — Pollinations/HF removed from
+the provider fallback chain. On HTTP 429 code 4006 (daily free allocation /
+~10000 neurons), rotate to the next configured CF account immediately.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +11,6 @@ import base64
 import logging
 import os
 import time
-import urllib.parse
 from pathlib import Path
 from typing import Any
 
@@ -181,65 +185,66 @@ def postprocess_line_art_heavy(img: Image.Image) -> Image.Image:
     return Image.fromarray(result).convert("RGB")
 
 
-def _download(url: str, timeout: int = 120) -> Image.Image:
-    resp = requests.get(url, timeout=timeout, headers={"User-Agent": "kdp-coloring-book-generator/1.0"})
-    resp.raise_for_status()
-    from io import BytesIO
+class CloudflarePausedError(RuntimeError):
+    """Raised when all Cloudflare accounts are exhausted (daily free allocation).
 
-    return Image.open(BytesIO(resp.content)).convert("RGB")
-
-
-def generate_pollinations(
-    prompt: str,
-    width: int,
-    height: int,
-    cfg: dict[str, Any],
-    seed: int | None = None,
-) -> Image.Image:
+    STATUS PAUSED — resume after free-tier reset (~5:30 AM IST / ~00:00 UTC).
+    Do not force-save a FAIL image as final.
     """
-    Free-tier path: Pollinations.ai image URL (no API key required).
 
-    Limitations: rate limits, variable quality, occasional downtime,
-    and generated art may need heavy post-processing for true line art.
-    Long prompts are trimmed so the GET URL stays within practical limits
-    (very long encoded prompts often 500 on image.pollinations.ai).
-    """
-    base = cfg["pollinations_url"].rstrip("/")
-    # Keep prompt short enough that encoded URL remains usable (~1800 raw chars).
-    pol_prompt = prompt if len(prompt) <= 1800 else prompt[:1800].rsplit(" ", 1)[0]
-    encoded = urllib.parse.quote(pol_prompt)
-    params = {
-        "width": width,
-        "height": height,
-        "nologo": "true",
-        "enhance": "false",
-    }
-    if seed is not None:
-        params["seed"] = seed
-    qs = urllib.parse.urlencode(params)
-    url = f"{base}/{encoded}?{qs}"
-    logger.info("Fetching Pollinations image…")
-    return _download(url)
+    def __init__(self, message: str | None = None):
+        msg = message or (
+            "STATUS PAUSED: Cloudflare daily free allocation exhausted on all "
+            "configured accounts (HTTP 429 / code 4006 / ~10000 neurons). "
+            "Resume after free-tier reset (~5:30 AM IST). "
+            "Do not force-save FAIL images as finals."
+        )
+        super().__init__(msg)
 
 
+def _is_cf_quota_error(exc: BaseException | str, status_code: int | None = None) -> bool:
+    """True for CF daily free allocation / neuron exhaustion (429 + 4006)."""
+    text = str(exc).lower()
+    if status_code == 429 and ("4006" in text or "neuron" in text or "daily free" in text):
+        return True
+    if "4006" in text:
+        return True
+    if "daily free allocation" in text:
+        return True
+    if "10000 neurons" in text or "10,000 neurons" in text or "10000 neuron" in text:
+        return True
+    if status_code == 429 and "neuron" in text:
+        return True
+    return False
 
 
-def _cloudflare_creds(cfg: dict[str, Any]) -> tuple[str, str]:
-    """Return (account_id, api_token) from config/env. Never log values."""
+def _cloudflare_accounts(cfg: dict[str, Any]) -> list[dict[str, str]]:
+    """Ordered CF accounts from config (env / box-secrets already loaded)."""
+    accounts = cfg.get("cloudflare_accounts") or []
+    if accounts:
+        return list(accounts)
+    # Fallback: single primary from flat keys
     account_id = (cfg.get("cloudflare_account_id") or "").strip()
     token = (cfg.get("cloudflare_api_token") or "").strip()
     if not account_id:
         account_id = (os.environ.get("CLOUDFLARE_ACCOUNT_ID") or "").strip()
     if not token:
         token = (os.environ.get("CLOUDFLARE_API_TOKEN") or "").strip()
-    return account_id, token
+    if account_id and token:
+        return [
+            {
+                "account_id": account_id,
+                "api_token": token,
+                "slot": "1",
+                "label": "cf-account-1",
+            }
+        ]
+    return []
 
 
 def cloudflare_available(cfg: dict[str, Any] | None = None) -> bool:
-    """True when both Cloudflare env credentials are present."""
-    c = cfg or {}
-    account_id, token = _cloudflare_creds(c)
-    return bool(account_id and token)
+    """True when at least one Cloudflare account pair is present."""
+    return bool(_cloudflare_accounts(cfg or {}))
 
 
 def generate_cloudflare(
@@ -247,19 +252,34 @@ def generate_cloudflare(
     width: int,
     height: int,
     cfg: dict[str, Any],
+    *,
+    account: dict[str, str] | None = None,
 ) -> Image.Image:
     """
     Cloudflare Workers AI — FLUX.1-schnell (@cf/black-forest-labs/flux-1-schnell).
 
-    Requires CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN.
+    Requires at least one CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN pair.
     API accepts prompt + steps only (no width/height); we resize afterward.
     Response JSON: result.image is base64-encoded JPEG.
+
+    On HTTP 429 with code 4006 / daily free allocation, raises RuntimeError
+    whose message is detected by _is_cf_quota_error for account rotation.
     """
     from io import BytesIO
 
-    account_id, token = _cloudflare_creds(cfg)
-    if not account_id or not token:
-        raise RuntimeError("CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN not set")
+    acct = account
+    if acct is None:
+        accounts = _cloudflare_accounts(cfg)
+        if not accounts:
+            raise RuntimeError(
+                "No Cloudflare credentials set. Configure CLOUDFLARE_ACCOUNT_ID / "
+                "CLOUDFLARE_API_TOKEN (and optional _2 / _3 rotation accounts)."
+            )
+        acct = accounts[0]
+
+    account_id = acct["account_id"]
+    token = acct["api_token"]
+    label = acct.get("label") or f"cf-account-{acct.get('slot', '?')}"
 
     url = (
         f"https://api.cloudflare.com/client/v4/accounts/{account_id}"
@@ -276,7 +296,7 @@ def generate_cloudflare(
     cf_prompt = prompt if len(prompt) <= 2048 else prompt[:2048].rsplit(" ", 1)[0]
     body = {"prompt": cf_prompt, "steps": steps}
 
-    logger.info("Fetching Cloudflare Workers AI (FLUX.1-schnell) image…")
+    logger.info("Fetching Cloudflare Workers AI (FLUX.1-schnell) via %s…", label)
     resp = requests.post(url, headers=headers, json=body, timeout=180)
     try:
         data = resp.json()
@@ -289,7 +309,13 @@ def generate_cloudflare(
             first = errs[0] if isinstance(errs[0], dict) else {"message": str(errs[0])}
             code = first.get("code")
             msg = str(first.get("message") or first)[:160]
-            raise RuntimeError(f"Cloudflare AI HTTP {resp.status_code} code={code}: {msg}")
+            err = RuntimeError(
+                f"Cloudflare AI HTTP {resp.status_code} code={code}: {msg}"
+            )
+            # Annotate for quota detection
+            err.cf_status = resp.status_code  # type: ignore[attr-defined]
+            err.cf_code = code  # type: ignore[attr-defined]
+            raise err
         resp.raise_for_status()
         raise RuntimeError(f"Cloudflare AI error: {errs or data}")
 
@@ -303,48 +329,23 @@ def generate_cloudflare(
         img = img.resize((width, height), Image.Resampling.LANCZOS)
     return img
 
-def generate_huggingface(
-    prompt: str,
-    width: int,
-    height: int,
-    cfg: dict[str, Any],
-) -> Image.Image:
-    """Optional HF Inference API (requires HF_TOKEN). Uses a free public model."""
-    token = cfg.get("hf_token") or ""
-    if not token:
-        raise RuntimeError("HF_TOKEN not set")
-
-    # FLUX / SD models may require paid tiers; use a commonly available free model id.
-    model = "black-forest-labs/FLUX.1-schnell"
-    api_url = f"https://api-inference.huggingface.co/models/{model}"
-    headers = {"Authorization": f"Bearer {token}"}
-    payload = {
-        "inputs": prompt,
-        "parameters": {"width": min(width, 1024), "height": min(height, 1024)},
-    }
-    resp = requests.post(api_url, headers=headers, json=payload, timeout=180)
-    if resp.status_code == 503:
-        # Model loading
-        time.sleep(10)
-        resp = requests.post(api_url, headers=headers, json=payload, timeout=180)
-    resp.raise_for_status()
-    from io import BytesIO
-
-    img = Image.open(BytesIO(resp.content)).convert("RGB")
-    if img.size != (width, height):
-        img = img.resize((width, height), Image.Resampling.LANCZOS)
-    return img
-
 
 def _resolve_provider(c: dict[str, Any]) -> str:
-    """
-    Prefer Cloudflare when config says so OR both CF env vars are set.
-    Otherwise use configured provider (pollinations / huggingface).
-    """
-    provider = str(c.get("provider", "pollinations")).lower()
-    if provider == "cloudflare" or cloudflare_available(c):
-        return "cloudflare"
-    return provider
+    """Live generation is Cloudflare-only. Pollinations/HF fallbacks removed."""
+    provider = str(c.get("provider", "cloudflare")).lower()
+    if provider != "cloudflare":
+        logger.warning(
+            "provider=%s ignored — live generation is Cloudflare-only "
+            "(Pollinations/HF removed from fallback chain)",
+            provider,
+        )
+    if not cloudflare_available(c):
+        raise RuntimeError(
+            "Cloudflare credentials required. Set CLOUDFLARE_ACCOUNT_ID + "
+            "CLOUDFLARE_API_TOKEN (optional _2 / _3 for rotation). "
+            "Pollinations/HF are not used as generation fallback."
+        )
+    return "cloudflare"
 
 
 def generate_with_retries(
@@ -352,61 +353,80 @@ def generate_with_retries(
     cfg: dict[str, Any] | None = None,
     seed: int | None = None,
 ) -> Image.Image:
-    """Try configured provider with exponential backoff. Returns RAW (unprocessed) RGB image."""
+    """Try Cloudflare with retries + multi-account rotation on quota (4006).
+
+    Returns RAW (unprocessed) RGB image. `seed` is accepted for API compat but
+    CF FLUX.1-schnell does not expose a seed parameter.
+
+    On daily free allocation exhaustion of ALL configured accounts, raises
+    CloudflarePausedError (STATUS PAUSED) — never falls back to Pollinations/HF.
+    """
+    del seed  # CF API has no seed; kept for call-site compatibility
     c = cfg or load_config()
-    provider = _resolve_provider(c)
+    _resolve_provider(c)
     retries = int(c.get("retries", 4))
     base = float(c.get("backoff_base_sec", 2.0))
     w, h = int(c["image_width_px"]), int(c["image_height_px"])
+    accounts = _cloudflare_accounts(c)
+    if not accounts:
+        raise RuntimeError("No Cloudflare accounts configured")
 
-    def _call(p: str) -> Image.Image:
-        if p == "cloudflare":
-            return generate_cloudflare(prompt, w, h, c)
-        if p == "huggingface" and c.get("hf_token"):
-            return generate_huggingface(prompt, w, h, c)
-        return generate_pollinations(prompt, w, h, c, seed=seed)
-
+    exhausted: set[str] = set()
     last_err: Exception | None = None
-    for attempt in range(retries):
+    account_index = 0
+
+    # Cap total attempts: per-account retries, rotating on quota
+    max_attempts = max(retries * len(accounts), retries)
+    attempt = 0
+    while attempt < max_attempts:
+        # Skip exhausted accounts
+        while account_index < len(accounts) and accounts[account_index]["slot"] in exhausted:
+            account_index += 1
+        if account_index >= len(accounts):
+            # All accounts exhausted
+            raise CloudflarePausedError()
+
+        acct = accounts[account_index]
+        label = acct.get("label") or f"cf-account-{acct.get('slot')}"
         try:
-            return _call(provider)
+            return generate_cloudflare(prompt, w, h, c, account=acct)
         except Exception as e:
             last_err = e
+            status = getattr(e, "cf_status", None)
             err_l = str(e).lower()
-            # CF free-tier neuron exhaustion / rate limit — back off harder
-            if "4006" in err_l or "daily free allocation" in err_l or "429" in err_l:
-                wait = max(base * (2**attempt), 30.0) * 2
+            if status is None and "http 429" in err_l:
+                status = 429
+
+            if _is_cf_quota_error(e, status_code=status):
+                exhausted.add(acct["slot"])
+                logger.warning(
+                    "Cloudflare quota exhausted on %s (%s) — rotating to next account",
+                    label,
+                    e,
+                )
+                account_index += 1
+                # Retry immediately on next account (no long wait)
+                attempt += 1
+                continue
+
             # Intermittent CF NSFW false positives — short retry often succeeds
-            elif "8007" in err_l or "nsfw" in err_l:
+            if "8007" in err_l or "nsfw" in err_l:
                 wait = base * (1.5**attempt) + 1.0
             else:
-                wait = base * (2**attempt)
+                wait = base * (2 ** min(attempt, 6))
             logger.warning(
                 "Image gen attempt %s/%s (%s) failed: %s — retry in %.1fs",
                 attempt + 1,
-                retries,
-                provider,
+                max_attempts,
+                label,
                 e,
                 wait,
             )
             time.sleep(wait)
+            attempt += 1
 
-    # Fallbacks: Cloudflare → Pollinations → Hugging Face (if token)
-    fallbacks: list[str] = []
-    if provider == "cloudflare":
-        fallbacks.append("pollinations")
-    if provider != "huggingface" and c.get("hf_token"):
-        fallbacks.append("huggingface")
-    if provider != "pollinations" and "pollinations" not in fallbacks:
-        fallbacks.append("pollinations")
-
-    for fb in fallbacks:
-        try:
-            logger.info("Falling back to provider=%s", fb)
-            return _call(fb)
-        except Exception as e:
-            last_err = e
-
+    if exhausted and len(exhausted) >= len(accounts):
+        raise CloudflarePausedError()
     raise RuntimeError(f"Image generation failed after retries: {last_err}")
 
 
@@ -418,19 +438,27 @@ def generate_page_image(
     page_index: int = 0,
     seed: int | None = None,
     cfg: dict[str, Any] | None = None,
+    theme_key: str | None = None,
+    theme: dict[str, Any] | None = None,
 ) -> Path:
     """Generate one coloring page image and save as PNG (plus raw/ for reprocess)."""
-    from .themes import build_prompt
+    from .themes import build_prompt, check_theme_subject
 
     c = cfg or load_config()
     w, h = int(c["image_width_px"]), int(c["image_height_px"])
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Theme lock: reject off-theme subjects before spending CF neurons
+    if theme_key or theme:
+        ok, reason = check_theme_subject(subject, theme_key=theme_key, theme=theme, cfg=c)
+        if not ok:
+            raise ValueError(f"THEME LOCK FAIL: {reason}")
+
     if dry_run:
         return save_placeholder(out_path, subject, w, h, page_index)
 
-    prompt = build_prompt(subject, c)
+    prompt = build_prompt(subject, c, theme_key=theme_key, theme=theme)
     page_seed = (seed + page_index) if seed is not None else None
     raw = generate_with_retries(prompt, c, seed=page_seed)
     raw = raw.resize((w, h), Image.Resampling.LANCZOS)
@@ -445,6 +473,8 @@ def generate_page_image(
     processed = postprocess_line_art(raw)
     processed.save(out_path, format="PNG")
     return out_path
+
+
 
 
 def reprocess_raw_images(book_dir: Path, cfg: dict[str, Any] | None = None) -> list[Path]:

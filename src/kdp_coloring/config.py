@@ -19,6 +19,13 @@ OUTPUT_DIR = PROJECT_ROOT / "output"
 # Points per inch (PDF)
 PT_PER_IN = 72.0
 
+# Env / box-secrets keys for Cloudflare multi-account rotation (slot 1 = primary).
+_CF_ACCOUNT_KEYS = (
+    ("CLOUDFLARE_ACCOUNT_ID", "CLOUDFLARE_API_TOKEN"),
+    ("CLOUDFLARE_ACCOUNT_ID_2", "CLOUDFLARE_API_TOKEN_2"),
+    ("CLOUDFLARE_ACCOUNT_ID_3", "CLOUDFLARE_API_TOKEN_3"),
+)
+
 
 def _load_box_card_secrets() -> None:
     """If Grok Bot card secrets exist, inject missing CLOUDFLARE_* into os.environ.
@@ -38,7 +45,16 @@ def _load_box_card_secrets() -> None:
     card = data.get("card") if isinstance(data, dict) else None
     if not isinstance(card, dict):
         return
-    for key in ("CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "HF_TOKEN", "POLLINATIONS_API_KEY"):
+    # Primary + rotated accounts; legacy HF/Pollinations keys ignored for live gen.
+    secret_keys = [
+        "CLOUDFLARE_API_TOKEN",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "CLOUDFLARE_API_TOKEN_2",
+        "CLOUDFLARE_ACCOUNT_ID_2",
+        "CLOUDFLARE_API_TOKEN_3",
+        "CLOUDFLARE_ACCOUNT_ID_3",
+    ]
+    for key in secret_keys:
         if os.environ.get(key):
             continue
         val = card.get(key)
@@ -50,6 +66,30 @@ def load_env() -> None:
     """Load .env from project root, then Grok Bot card secrets if needed."""
     load_dotenv(PROJECT_ROOT / ".env")
     _load_box_card_secrets()
+
+
+def cloudflare_accounts_from_env() -> list[dict[str, str]]:
+    """Return ordered list of {account_id, api_token, slot} for configured CF accounts.
+
+    Slot 1 = CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN
+    Slot 2 = CLOUDFLARE_ACCOUNT_ID_2 / CLOUDFLARE_API_TOKEN_2
+    Slot 3 = CLOUDFLARE_ACCOUNT_ID_3 / CLOUDFLARE_API_TOKEN_3
+    Incomplete pairs are skipped. Values never logged.
+    """
+    accounts: list[dict[str, str]] = []
+    for slot, (aid_key, tok_key) in enumerate(_CF_ACCOUNT_KEYS, start=1):
+        account_id = (os.environ.get(aid_key) or "").strip()
+        token = (os.environ.get(tok_key) or "").strip()
+        if account_id and token:
+            accounts.append(
+                {
+                    "account_id": account_id,
+                    "api_token": token,
+                    "slot": str(slot),
+                    "label": f"cf-account-{slot}",
+                }
+            )
+    return accounts
 
 
 def load_config(path: Path | None = None) -> dict[str, Any]:
@@ -66,6 +106,7 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     defaults = data.get("defaults", {})
     image = data.get("image", {})
     generation = data.get("generation", {})
+    theme_lock = data.get("theme_lock", {}) or {}
 
     width_in = float(page.get("width_in", 8.5))
     height_in = float(page.get("height_in", 11.0))
@@ -94,6 +135,15 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
     else:
         anatomy_check = ""
 
+    theme_constraint_default = generation.get("theme_constraint", "")
+    if isinstance(theme_constraint_default, str):
+        theme_constraint_default = " ".join(theme_constraint_default.split())
+    else:
+        theme_constraint_default = ""
+
+    cf_accounts = cloudflare_accounts_from_env()
+    primary = cf_accounts[0] if cf_accounts else {}
+
     return {
         "page_width_in": width_in,
         "page_height_in": height_in,
@@ -113,17 +163,19 @@ def load_config(path: Path | None = None) -> dict[str, Any]:
         "image_height_px": int(image.get("height_px", 3300)),
         "retries": int(image.get("retries", 4)),
         "backoff_base_sec": float(image.get("backoff_base_sec", 2.0)),
-        "provider": str(image.get("provider", "pollinations")).lower(),
+        # Live generation is Cloudflare-only (no Pollinations/HF fallback).
+        "provider": str(image.get("provider", "cloudflare")).lower(),
         "prompt_suffix": prompt_suffix,
         "avoid_prompt": " ".join(str(generation.get("avoid_prompt", "")).split()),
         "anatomy_check": anatomy_check,
-        "hf_token": os.getenv("HF_TOKEN") or os.getenv("HUGGINGFACE_TOKEN") or "",
-        "cloudflare_account_id": os.getenv("CLOUDFLARE_ACCOUNT_ID") or "",
-        "cloudflare_api_token": os.getenv("CLOUDFLARE_API_TOKEN") or "",
+        "theme_constraint": theme_constraint_default,
+        "theme_lock": theme_lock if isinstance(theme_lock, dict) else {},
+        "cloudflare_accounts": cf_accounts,
+        "cloudflare_account_id": primary.get("account_id")
+        or (os.getenv("CLOUDFLARE_ACCOUNT_ID") or ""),
+        "cloudflare_api_token": primary.get("api_token")
+        or (os.getenv("CLOUDFLARE_API_TOKEN") or ""),
         "cloudflare_steps": int(image.get("cloudflare_steps", 4)),
-        "pollinations_url": os.getenv(
-            "POLLINATIONS_URL", "https://image.pollinations.ai/prompt"
-        ),
         "project_root": PROJECT_ROOT,
         "output_dir": OUTPUT_DIR,
         "themes_path": THEMES_PATH,

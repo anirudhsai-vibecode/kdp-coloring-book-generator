@@ -6,7 +6,7 @@ Generate **print-ready Amazon KDP** coloring books for ages **3–7**:
 - Default **50** interior pages (use `--pages 25` for free-tier AI limits)
 - Trim size **8.5″ × 11″** (612 × 792 pt)
 - Full-wrap **cover PDF** (back + spine + front)
-- Free AI line art via **Cloudflare Workers AI (FLUX.1-schnell)** when CF env vars are set; **Pollinations.ai** fallback (no key); optional Hugging Face token
+- Free AI line art via **Cloudflare Workers AI (FLUX.1-schnell)** only (multi-account rotation on daily quota). Pollinations/HF are **not** used as generation fallback
 - `--dry-run` placeholders so the PDF pipeline works offline
 
 **No trademarked characters** (no Disney, Pokémon, Peppa Pig, etc.) — original cute subjects only.
@@ -24,8 +24,8 @@ pip install -r requirements.txt
 # Offline verification (no API keys, no network for images)
 python main.py --dry-run --pages 5
 
-# Full run (Pollinations free image API)
-python main.py --pages 25
+# Full run (requires CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN)
+python main.py --pages 25 --auto-approve
 
 # Specific theme + seed + author
 python main.py --theme dinosaurs --pages 50 --seed 42 --author "Your Name Here"
@@ -50,12 +50,23 @@ python main.py --list-themes
 | `--dry-run` | Pillow placeholder line art (no network) |
 | `--list-themes` | Show themes and exit |
 | `--output-dir PATH` | Override output root |
+| `--max-regen N` | Pause-and-ask after N exit-gate FAILs per page (default: unlimited until PASS) |
+| `--require-user-review` / `--no-require-user-review` | Block packaging until USER_APPROVED.json (default: on) |
+| `--auto-approve` | Skip user-review gate (automation) |
+| `--packaging-only DIR` | Build PDFs for an existing PASS book dir |
+| `--skip-exit-gate` | Escape hatch — skip image QA (not for production) |
 
 Output layout:
 
 ```
 output/<slug>-<timestamp>/
   images/page_001.png …
+  images/raw/page_001.png …
+  failed_dump/page-01-attempt-1.png …
+  failed_dump/manifest.json
+  AWAITING_USER_REVIEW.json   # when --require-user-review and not yet approved
+  USER_APPROVED.json          # create this to unlock packaging
+  PACKAGING_DONE.json         # after PDFs built
   interior.pdf
   cover.pdf
   metadata.json
@@ -65,39 +76,28 @@ output/<slug>-<timestamp>/
 
 ## Free-tier AI notes
 
-### Preferred: Cloudflare Workers AI (FLUX.1-schnell)
+### Cloudflare Workers AI only (FLUX.1-schnell)
 
-1. Create a free Cloudflare account and Workers AI API token (Run permission).
+Live generation uses **Cloudflare Workers AI** exclusively. Pollinations and Hugging Face are **removed** from the provider fallback chain.
+
+1. Create one or more free Cloudflare accounts and Workers AI API tokens (Run permission).
 2. Copy `.env.example` → `.env` and set:
-   - `CLOUDFLARE_ACCOUNT_ID`
-   - `CLOUDFLARE_API_TOKEN`
-3. Set `image.provider: cloudflare` in `config.yaml` (default), **or** leave any provider — if both CF env vars are set, Cloudflare is used first automatically.
-4. Model: `@cf/black-forest-labs/flux-1-schnell` (`steps: 4` by default; free ~10,000 Neurons/day).
-5. Outputs still go through `postprocess_line_art` for kids outline pages.
+   - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` (primary)
+   - Optional rotation: `CLOUDFLARE_ACCOUNT_ID_2` / `CLOUDFLARE_API_TOKEN_2`
+   - Optional rotation: `CLOUDFLARE_ACCOUNT_ID_3` / `CLOUDFLARE_API_TOKEN_3`
+3. The same keys are also loaded from `/home/box/agent-data/box-secrets.json` → `card` when present (Grok Bot).
+4. Model: `@cf/black-forest-labs/flux-1-schnell` (`cloudflare_steps` in `config.yaml`; free ~10,000 Neurons/day per account).
+5. On HTTP **429** with code **4006** / message containing **daily free allocation** or **10000 neurons**, the generator **rotates to the next unused account immediately**. If all accounts are exhausted → **STATUS PAUSED** (resume ~5:30 AM IST). FAIL images are never force-saved as finals.
+6. Outputs still go through `postprocess_line_art` for kids outline pages.
 
-Never commit real tokens. The app reads credentials only from the environment / `.env` and does not log them.
+Never commit real tokens. The app reads credentials only from the environment / `.env` / box-secrets and does not log them.
 
-### Fallback: Pollinations.ai (no key)
+### Pipeline locks
 
-- HTTP image URL: `https://image.pollinations.ai/prompt/<encoded prompt>`
-- **No API key required** — used when Cloudflare is unset or fails
-- Images are post-processed toward cleaner line art
-
-**Limitations found / expected:**
-
-- Rate limits and occasional slow responses or timeouts
-- Quality varies; not always perfect “coloring book” outlines (shading may appear — post-process helps)
-- Public free service — availability and terms can change
-- For bulk/50-page books, prefer `--pages 25` or run in batches with delays
-- Retries + exponential backoff are built in (`config.yaml` → `image.retries`)
-
-### Optional: Hugging Face
-
-1. Copy `.env.example` → `.env`
-2. Set `HF_TOKEN=hf_...`
-3. Set `image.provider: huggingface` in `config.yaml` (or keep as later fallback)
-
-Free HF Inference tiers have quotas and model cold-starts; some models may require a paid plan.
+- **Regen until PASS**: each page regenerates until the exit gate PASSes. Default is unlimited. Optional `--max-regen N` is a pause-and-ask threshold only (never force-final).
+- **failed_dump/**: every exit-gate FAIL is copied to `output/<book>/failed_dump/page-NN-attempt-K.png` with `manifest.json`.
+- **User review**: `--require-user-review` (default true) writes `AWAITING_USER_REVIEW.json` and blocks PDF packaging until `USER_APPROVED.json` appears, or pass `--auto-approve`.
+- **Theme lock**: pet themes require pet subjects; garden chores / jars-as-main-subject / farm tools are rejected unless pet-related. See `theme_lock` in `config.yaml` and `build_prompt()`.
 
 ### Dry-run
 
@@ -108,7 +108,7 @@ Free HF Inference tiers have quotas and model cold-starts; some models may requi
 ## Configuration
 
 - `config.yaml` — page size, margins, bleed, spine factors, image size, provider
-- `.env` / `.env.example` — `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, `AUTHOR`, `HF_TOKEN`, optional `POLLINATIONS_URL`
+- `.env` / `.env.example` — `CLOUDFLARE_ACCOUNT_ID`/`_TOKEN` (+ optional `_2`/`_3`), `AUTHOR`
 - `src/kdp_coloring/themes.yaml` — themes, title templates, subject pools
 
 ### Spine width (KDP B&W paperback)
@@ -179,7 +179,7 @@ Thresholds are documented in [`qa_checks/THRESHOLDS.md`](qa_checks/THRESHOLDS.md
 
 ### Page Factory exit gate (before QA handoff)
 
-After generate, before QA: run the exit gate. On FAIL → regenerate; do **not** send to QA. Wired into `main.py` by default (`--max-regen 2`, escape with `--skip-exit-gate`). Details: [`docs/PAGE_FACTORY.md`](docs/PAGE_FACTORY.md).
+After generate, before QA: run the exit gate. On FAIL → regenerate; do **not** send to QA. Wired into `main.py` by default (unlimited regen until PASS; optional `--max-regen N` pause-and-ask; escape with `--skip-exit-gate`). Details: [`docs/PAGE_FACTORY.md`](docs/PAGE_FACTORY.md).
 
 ```bash
 python scripts/page_factory_exit_gate.py path/to/images_dir

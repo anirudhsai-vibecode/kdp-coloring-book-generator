@@ -34,9 +34,21 @@ python scripts/page_factory_exit_gate.py output/some-book/images \
 # --skip-eyes   # escape hatch for pupils heuristic only
 
 # Built into main generate path (default on)
-python main.py --pages 8 --theme ... --dry-run
+python main.py --pages 8 --theme ... --dry-run --auto-approve
 # --skip-exit-gate   # escape hatch only
-# --max-regen 2      # retries per page on FAIL (default 2)
+# --max-regen N      # optional pause-and-ask after N FAILs (default: unlimited until PASS)
+# --require-user-review (default) blocks packaging until USER_APPROVED.json
 ```
 
-`main.py` runs the gate per page (with regen) and a final directory sweep before building PDFs. Exit code **1** means do not hand off to QA.
+`main.py` regenerates each page until the exit gate PASSes (never force-saves FAIL as final).
+Every FAIL is copied to `failed_dump/page-NN-attempt-K.png`. On Cloudflare daily quota
+exhaustion (all accounts) → STATUS PAUSED. A final directory sweep runs before packaging.
+Exit code **1** means do not hand off to QA / resume after pause.
+
+
+## AD FLOOR LOCKS (pipeline)
+
+1. **Until PASS** — regenerate each page until exit-gate PASS. Never force-save a FAIL as final. Hard pause only on Cloudflare quota exhaustion (all configured accounts).
+2. **Cloudflare only** — no Pollinations/HF fallback. Up to 3 CF account slots (`CLOUDFLARE_ACCOUNT_ID` / `_2` / `_3`). On HTTP 429 code 4006, rotate to the next account.
+3. **failed_dump/** — every exit-gate FAIL is saved as `page-NN-attempt-K.png` (+ `manifest.json`). After all pages PASS, packaging waits for user/AD review (`USER_APPROVED.json` or `--auto-approve`).
+4. **Theme lock** — subjects/props must stay in-theme (e.g. pets rejects garden/jar-as-main-subject). Hard fail before final.
