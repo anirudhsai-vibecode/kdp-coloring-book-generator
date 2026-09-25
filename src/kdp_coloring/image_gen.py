@@ -83,8 +83,9 @@ def desolidify_ink(ink255: np.ndarray, *, page_h: int | None = None, page_w: int
     """
     h, w = ink255.shape[:2]
     thr_area = int(_SOLID_AREA_FRAC * h * w)
-    # Prefer thicker kid stroke when hollowing true fills (was max(4, //400) → too thin/ribbony)
-    thickness = max(6, min(page_h or h, page_w or w) // 280)
+    # Kid stroke floor 6; //400 keeps rings thin enough that QA solid_fills won't
+    # mistake them for fills (//280 ≈11px rings false-positive as solid_fills).
+    thickness = max(6, min(page_h or h, page_w or w) // 400)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(ink255, connectivity=8)
     out = np.zeros_like(ink255)
     hollowed = 0
@@ -97,11 +98,19 @@ def desolidify_ink(ink255: np.ndarray, *, page_h: int | None = None, page_w: int
             skipped_stroke += 1
             continue
         if area > thr_area and _is_filled_region(cc, area):
-            cnts, _ = cv2.findContours(
-                (cc.astype(np.uint8) * 255), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
-            )
-            cv2.drawContours(out, cnts, -1, 255, thickness=thickness)
-            hollowed += 1
+            # Morphological ring: subtract eroded core (contour-draw fills complex blobs → ribbons)
+            u8 = (cc.astype(np.uint8)) * 255
+            k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            # iters so ring width ≈ thickness px (3x3 erode ≈1px/iter each side)
+            iters = max(2, (thickness + 1) // 2)
+            core = cv2.erode(u8, k, iterations=iters)
+            ring = cv2.subtract(u8, core)
+            # If core vanished entirely (shape too thin), keep original — do not invent ribbons
+            if int(np.count_nonzero(core)) < max(50, int(0.02 * area)):
+                out[cc] = 255
+            else:
+                out[ring > 0] = 255
+                hollowed += 1
         else:
             out[cc] = 255
     if hollowed or skipped_stroke:
