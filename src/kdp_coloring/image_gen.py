@@ -34,7 +34,9 @@ _SOLID_AREA_FRAC = 0.02
 def _is_stroke_like(mask_cc: np.ndarray, area: int) -> bool:
     """True if component looks like stroke/outline art (do NOT desolidify → ribbons).
 
-    Skip when 1–2 erosions erase nearly all ink, or perimeter²/area is high (thin rings).
+    Primary: after 1–2 erosions ink is nearly gone (true solids keep a fat core).
+    Secondary: high perimeter²/area ONLY when erosion already removed most mass
+    (complex solid silhouettes have high peri but rem2/area stays high — keep those).
     """
     u8 = (mask_cc.astype(np.uint8)) * 255
     # After 1–2 erosions, stroke art vanishes; true solid fills keep a core.
@@ -44,13 +46,14 @@ def _is_stroke_like(mask_cc: np.ndarray, area: int) -> bool:
     rem2 = int(np.count_nonzero(eroded2))
     if rem2 < max(80, int(0.05 * area)) or rem1 < max(120, int(0.12 * area)):
         return True
-    # High perimeter²/area → thin elongated / already-outline rings
-    cnts, _ = cv2.findContours(u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not cnts:
-        return True
-    peri = float(sum(cv2.arcLength(c, True) for c in cnts))
-    if peri > 0 and (peri * peri) / max(area, 1) > 80.0:
-        return True
+    # Thin rings / double-outline ribbons: high peri AND little surviving core
+    if rem2 < int(0.35 * area):
+        cnts, _ = cv2.findContours(u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        if not cnts:
+            return True
+        peri = float(sum(cv2.arcLength(c, True) for c in cnts))
+        if peri > 0 and (peri * peri) / max(area, 1) > 200.0:
+            return True
     return False
 
 
