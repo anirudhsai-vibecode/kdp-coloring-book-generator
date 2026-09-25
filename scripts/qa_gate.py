@@ -355,6 +355,56 @@ def _count_distinct_thin_lines(win: np.ndarray, horizontal: bool) -> int:
     return count
 
 
+
+def check_hollow_ribbons(rep: FileReport, gray: np.ndarray) -> None:
+    """HARD FAIL hollow double-outline / ribbon strokes (AD lock).
+
+    Mirrors ``kdp_coloring.image_gen.ribbon_risk`` on processed 1-bit pages:
+    solid thick strokes keep a core under mild erosion and have low morph-gradient
+    relative to ink; hollow ribbons are edge-dominated and their white channels
+    fill under a small morphological close.
+    """
+    if cv2 is None:
+        rep.add("hollow_ribbons", "SKIP", "opencv unavailable")
+        return
+    ink = ((gray < 128).astype(np.uint8)) * 255
+    n_ink = int(np.count_nonzero(ink))
+    ink_frac = float(n_ink) / max(1, gray.size)
+    if ink_frac < 0.005:
+        rep.add("hollow_ribbons", "PASS", "too little ink to score ribbons")
+        return
+    eroded = cv2.erode(ink, np.ones((3, 3), np.uint8), iterations=2)
+    rem = float(np.count_nonzero(eroded)) / max(1, n_ink)
+    grad = cv2.morphologyEx(ink, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8))
+    grad_frac = float(np.mean(grad > 0))
+    grad_ratio = grad_frac / max(ink_frac, 1e-9)
+    closed = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=1)
+    gained = float(np.count_nonzero((closed > 0) & (ink == 0))) / max(1, gray.size)
+
+    reasons: list[str] = []
+    if rem < 0.15 and ink_frac > 0.02 and grad_ratio > 0.6:
+        reasons.append(f"thin-wall rem2={rem:.2f} grad/ink={grad_ratio:.2f}")
+    if ink_frac > 0.015 and grad_ratio > 0.70 and gained > 0.004:
+        reasons.append(f"channel-fill close7={gained:.4f} grad/ink={grad_ratio:.2f}")
+    if ink_frac > 0.015 and rem < 0.60 and grad_ratio > 0.75:
+        reasons.append(f"edge-dominated rem2={rem:.2f} grad/ink={grad_ratio:.2f}")
+    if gained > 0.012 and rem < 0.35:
+        reasons.append(f"wide ribbon channels close7={gained:.4f} rem2={rem:.2f}")
+
+    if reasons:
+        rep.add(
+            "hollow_ribbons",
+            "FAIL",
+            "hollow double-outline ribbons — " + "; ".join(reasons),
+        )
+    else:
+        rep.add(
+            "hollow_ribbons",
+            "PASS",
+            f"solid strokes rem2={rem:.2f} grad/ink={grad_ratio:.2f} close7={gained:.4f}",
+        )
+
+
 def check_wire_grid(rep: FileReport, gray: np.ndarray) -> None:
     ink = _black_mask(gray)
     h, w = ink.shape
@@ -710,6 +760,7 @@ def qa_image(
     check_pure_bw(rep, im, gray)
     check_margin_ink(rep, gray)
     check_solid_fills(rep, gray)
+    check_hollow_ribbons(rep, gray)
     check_wire_grid(rep, gray)
     check_hairlines(rep, gray)
     check_eyes_pupils(rep, gray, skip=skip_eyes)

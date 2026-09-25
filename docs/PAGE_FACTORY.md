@@ -17,7 +17,7 @@ See `qa_checks/THRESHOLDS.md`. Includes:
 - Canvas exactly **2550 × 3300** portrait
 - Pure 1-bit / no mid-gray
 - No ink in **0.5″** margin
-- Solid black fills, wire-grid density, hairline strokes
+- Solid black fills, **hollow ribbons** (double-outline tubes), wire-grid density, hairline strokes
 - **Eyes / pupils** heuristic (default ON; `--skip-eyes` to disable)
 - **Chore-class uniqueness** when `--scene-list` is provided (same tool/action class twice → FAIL)
 - Interior PDF **page numbers** required at package QA (`qa_gate.py pdf`)

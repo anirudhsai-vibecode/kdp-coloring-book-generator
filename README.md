@@ -50,7 +50,7 @@ python main.py --list-themes
 | `--dry-run` | Pillow placeholder line art (no network) |
 | `--list-themes` | Show themes and exit |
 | `--output-dir PATH` | Override output root |
-| `--max-regen N` | Hard cap after N exit-gate FAILs per page; force-save last FAIL as final (default: 3; `0` = unlimited until PASS) |
+| `--max-regen N` | Hard cap after N exit-gate FAILs per page; force-save last FAIL as final (default: **0** = unlimited until PASS; `N>0` = opt-in CF-conservation cap) |
 | `--require-user-review` / `--no-require-user-review` | Block packaging until USER_APPROVED.json (default: on) |
 | `--auto-approve` | Skip user-review gate (automation) |
 | `--packaging-only DIR` | Build PDFs for an existing PASS book dir |
@@ -87,14 +87,14 @@ Live generation uses **Cloudflare Workers AI** exclusively. Pollinations and Hug
    - Optional rotation: `CLOUDFLARE_ACCOUNT_ID_3` / `CLOUDFLARE_API_TOKEN_3`
 3. The same keys are also loaded from `/home/box/agent-data/box-secrets.json` → `card` when present (Grok Bot).
 4. Model: `@cf/black-forest-labs/flux-1-schnell` (`cloudflare_steps` in `config.yaml`; free ~10,000 Neurons/day per account).
-5. On HTTP **429** with code **4006** / message containing **daily free allocation** or **10000 neurons**, the generator **rotates to the next unused account immediately**. If all accounts are exhausted → **STATUS PAUSED** (resume ~5:30 AM IST). Every FAIL is dumped; after the hard regen cap, the last FAIL is force-saved as the page final.
+5. On HTTP **429** with code **4006** / message containing **daily free allocation** or **10000 neurons**, the generator **rotates to the next unused account immediately**. If all accounts are exhausted → **STATUS PAUSED** (resume ~5:30 AM IST). Every FAIL is dumped. Default is unlimited until PASS (no force-save); only an opt-in `--max-regen N` (N>0) force-saves the last FAIL as the page final.
 6. Outputs still go through `postprocess_line_art` for kids outline pages.
 
 Never commit real tokens. The app reads credentials only from the environment / `.env` / box-secrets and does not log them.
 
 ### Pipeline locks
 
-- **Regen limit**: each page regenerates until the exit gate PASSes or the hard `--max-regen` cap is reached. The default is 3 FAILs; after N FAILs, the last attempt is force-saved as the page final to conserve Cloudflare quota. `--max-regen 0` means unlimited until PASS.
+- **Regen limit**: each page regenerates until the exit gate PASSes. Default `--max-regen 0` = **unlimited until PASS** (never force-save a FAIL as final). Opt-in `--max-regen N` (N>0) caps FAILs then force-saves the last FAIL (CF-conservation only).
 - **failed_dump/**: every exit-gate FAIL is copied to `output/<book>/failed_dump/page-NN-attempt-K.png` with `manifest.json`.
 - **User review**: `--require-user-review` (default true) writes `AWAITING_USER_REVIEW.json` and blocks PDF packaging until `USER_APPROVED.json` appears, or pass `--auto-approve`.
 - **Theme lock**: pet themes require pet subjects; garden chores / jars-as-main-subject / farm tools are rejected unless pet-related. See `theme_lock` in `config.yaml` and `build_prompt()`.
@@ -179,7 +179,7 @@ Thresholds are documented in [`qa_checks/THRESHOLDS.md`](qa_checks/THRESHOLDS.md
 
 ### Page Factory exit gate (before QA handoff)
 
-After generate, before QA: run the exit gate. On FAIL → regenerate; do **not** send to QA unless the hard regen cap is reached. Wired into `main.py` by default (`--max-regen 3`; `--max-regen 0` for unlimited until PASS; escape with `--skip-exit-gate`). Details: [`docs/PAGE_FACTORY.md`](docs/PAGE_FACTORY.md).
+After generate, before QA: run the exit gate. On FAIL → regenerate; do **not** send to QA. Wired into `main.py` by default (`--max-regen 0` = unlimited until PASS; opt-in `--max-regen N` may force-save after N FAILs; escape with `--skip-exit-gate`). Details: [`docs/PAGE_FACTORY.md`](docs/PAGE_FACTORY.md).
 
 ```bash
 python scripts/page_factory_exit_gate.py path/to/images_dir
