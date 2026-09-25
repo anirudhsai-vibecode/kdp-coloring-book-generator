@@ -24,6 +24,100 @@ from .placeholders import save_placeholder
 
 logger = logging.getLogger(__name__)
 
+# Print canvas locks (match qa_gate / config defaults)
+_PRINT_W = 2550
+_PRINT_H = 3300
+_MARGIN_PX = 150  # 0.5″ @ 300 DPI
+_SOLID_AREA_FRAC = 0.02
+
+
+def _is_filled_region(mask_cc: np.ndarray, area: int) -> bool:
+    """Heuristic: True if connected component is a solid blob (not a thin stroke)."""
+    u8 = (mask_cc.astype(np.uint8)) * 255
+    eroded = cv2.erode(u8, np.ones((3, 3), np.uint8), iterations=2)
+    if int(np.count_nonzero(eroded)) > max(500, int(0.15 * area)):
+        return True
+    ys, xs = np.where(mask_cc)
+    if len(xs) == 0:
+        return False
+    bw = int(xs.max() - xs.min() + 1)
+    bh = int(ys.max() - ys.min() + 1)
+    return (area / max(1, bw * bh)) > 0.55 and bw >= 40 and bh >= 40
+
+
+def desolidify_ink(ink255: np.ndarray, *, page_h: int | None = None, page_w: int | None = None) -> np.ndarray:
+    """Hollow large solid black fills into outlines (AD FLOOR: bake into default postprocess).
+
+    ink255: white=255 on ink pixels (OpenCV binary convention). Small blobs (pupils,
+    thin strokes) are preserved; components > ~2% of page that look filled become rings.
+    """
+    h, w = ink255.shape[:2]
+    thr_area = int(_SOLID_AREA_FRAC * h * w)
+    thickness = max(4, min(page_h or h, page_w or w) // 400)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(ink255, connectivity=8)
+    out = np.zeros_like(ink255)
+    hollowed = 0
+    for i in range(1, n):
+        area = int(stats[i, cv2.CC_STAT_AREA])
+        cc = labels == i
+        if area > thr_area and _is_filled_region(cc, area):
+            cnts, _ = cv2.findContours(
+                (cc.astype(np.uint8) * 255), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
+            )
+            cv2.drawContours(out, cnts, -1, 255, thickness=thickness)
+            hollowed += 1
+        else:
+            out[cc] = 255
+    if hollowed:
+        logger.info("desolidify: hollowed %s large solid fill(s)", hollowed)
+    return out
+
+
+def fit_print_canvas(
+    img: Image.Image,
+    *,
+    width: int = _PRINT_W,
+    height: int = _PRINT_H,
+    margin: int = _MARGIN_PX,
+) -> Image.Image:
+    """Center content on 2550×3300 with safe margin; 1-bit black-on-white; desolidify."""
+    gray = np.asarray(img.convert("L"))
+    if gray.shape != (height, width):
+        gray = np.asarray(img.resize((width, height), Image.Resampling.LANCZOS).convert("L"))
+    ink = ((gray < 160).astype(np.uint8)) * 255
+    ys, xs = np.where(ink > 0)
+    canvas_ink = np.zeros((height, width), np.uint8)
+    if ys.size == 0:
+        return Image.fromarray(np.full((height, width), 255, np.uint8)).convert("RGB")
+    y0, y1 = int(ys.min()), int(ys.max())
+    x0, x1 = int(xs.min()), int(xs.max())
+    pad = 20
+    y0, y1 = max(0, y0 - pad), min(height - 1, y1 + pad)
+    x0, x1 = max(0, x0 - pad), min(width - 1, x1 + pad)
+    crop = ink[y0 : y1 + 1, x0 : x1 + 1]
+    ch, cw = crop.shape
+    max_w, max_h = width - 2 * margin, height - 2 * margin
+    target_h = int(0.75 * max_h)
+    scale = min(max_w / max(cw, 1), max_h / max(ch, 1))
+    if ch * scale < target_h * 0.9:
+        scale = min(max_w / max(cw, 1), target_h / max(ch, 1))
+    nw = max(1, int(round(cw * scale)))
+    nh = max(1, int(round(ch * scale)))
+    resized = cv2.resize(crop, (nw, nh), interpolation=cv2.INTER_AREA)
+    resized = ((resized > 80).astype(np.uint8)) * 255
+    resized = desolidify_ink(resized, page_h=height, page_w=width)
+    ox, oy = (width - nw) // 2, (height - nh) // 2
+    canvas_ink[oy : oy + nh, ox : ox + nw] = resized
+    canvas_ink = desolidify_ink(canvas_ink, page_h=height, page_w=width)
+    canvas_ink[:margin, :] = 0
+    canvas_ink[-margin:, :] = 0
+    canvas_ink[:, :margin] = 0
+    canvas_ink[:, -margin:] = 0
+    page = np.full((height, width), 255, np.uint8)
+    page[canvas_ink > 0] = 0
+    return Image.fromarray(page).convert("RGB")
+
+
 
 def postprocess_line_art(img: Image.Image) -> Image.Image:
     """
@@ -74,7 +168,8 @@ def postprocess_line_art(img: Image.Image) -> Image.Image:
 
     result = np.full_like(cleaned, 255)
     result[cleaned > 0] = 0
-    return Image.fromarray(result).convert("RGB")
+    # AD FLOOR: desolidify + print canvas fit (stops solid_fills CF burn)
+    return fit_print_canvas(Image.fromarray(result).convert("RGB"), width=w, height=h)
 
 
 def postprocess_line_art_heavy(img: Image.Image) -> Image.Image:
@@ -182,7 +277,7 @@ def postprocess_line_art_heavy(img: Image.Image) -> Image.Image:
     # Black lines on pure white
     result = np.full_like(cleaned, 255)
     result[cleaned > 0] = 0
-    return Image.fromarray(result).convert("RGB")
+    return fit_print_canvas(Image.fromarray(result).convert("RGB"), width=w, height=h)
 
 
 class CloudflarePausedError(RuntimeError):

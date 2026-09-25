@@ -52,3 +52,8 @@ Exit code **1** means do not hand off to QA / resume after pause.
 2. **Cloudflare only** — no Pollinations/HF fallback. Up to 3 CF account slots (`CLOUDFLARE_ACCOUNT_ID` / `_2` / `_3`). On HTTP 429 code 4006, rotate to the next account.
 3. **failed_dump/** — every exit-gate FAIL is saved as `page-NN-attempt-K.png` (+ `manifest.json`). After all pages PASS, packaging waits for user/AD review (`USER_APPROVED.json` or `--auto-approve`).
 4. **Theme lock** — subjects/props must stay in-theme (e.g. pets rejects garden/jar-as-main-subject). Hard fail before final.
+
+
+## Desolidify (default postprocess)
+
+`postprocess_line_art` / heavy path always run **desolidify** + print-canvas fit (2550×3300, 0.5″ margin) before save. Large solid black fills (>~2% page) become thick outlines; pupils/small strokes are kept. This avoids burning Cloudflare neurons on exit-gate `solid_fills` FAILs.
