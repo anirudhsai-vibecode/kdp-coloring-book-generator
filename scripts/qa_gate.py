@@ -213,30 +213,39 @@ def check_margin_ink(rep: FileReport, gray: np.ndarray) -> None:
 
 
 def _is_filled_region(mask_cc: np.ndarray, area: int) -> bool:
-    """Heuristic: solid fill vs thin stroke ring."""
-    if cv2 is None:
-        # Fallback: fill ratio in bounding box
-        ys, xs = np.where(mask_cc)
-        if len(xs) == 0:
-            return False
-        bw = int(xs.max() - xs.min() + 1)
-        bh = int(ys.max() - ys.min() + 1)
-        bbox_area = max(1, bw * bh)
-        return (area / bbox_area) > 0.55 and bw >= 40 and bh >= 40
+    """Heuristic: compact solid paint-bucket fill vs thick stroke/outline network.
 
-    u8 = mask_cc.astype(np.uint8) * 255
-    kernel = np.ones((3, 3), np.uint8)
-    eroded = cv2.erode(u8, kernel, iterations=2)
-    eroded_area = int(np.count_nonzero(eroded))
-    if eroded_area > max(500, int(0.15 * area)):
-        return True
+    Thick connected outline art survives mild erosion and used to false-positive
+    as solid_fills, which pushed postprocess into morph-ring ribbons. Exclude
+    stroke-like CCs via low bbox fill-ratio or high perimeter²/area.
+    """
     ys, xs = np.where(mask_cc)
     if len(xs) == 0:
         return False
     bw = int(xs.max() - xs.min() + 1)
     bh = int(ys.max() - ys.min() + 1)
     bbox_area = max(1, bw * bh)
-    return (area / bbox_area) > 0.55 and bw >= 40 and bh >= 40
+    fill_ratio = area / bbox_area
+
+    if cv2 is None:
+        return fill_ratio > 0.55 and bw >= 40 and bh >= 40
+
+    u8 = mask_cc.astype(np.uint8) * 255
+    # Stroke / outline network signals
+    if fill_ratio < 0.35:
+        return False
+    cnts, _ = cv2.findContours(u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if cnts:
+        peri = float(sum(cv2.arcLength(c, True) for c in cnts))
+        if peri > 0 and (peri * peri) / max(area, 1) > 100.0:
+            return False
+
+    kernel = np.ones((3, 3), np.uint8)
+    eroded = cv2.erode(u8, kernel, iterations=2)
+    eroded_area = int(np.count_nonzero(eroded))
+    if eroded_area > max(500, int(0.15 * area)) and fill_ratio > 0.40:
+        return True
+    return fill_ratio > 0.55 and bw >= 40 and bh >= 40
 
 
 def check_solid_fills(rep: FileReport, gray: np.ndarray) -> None:

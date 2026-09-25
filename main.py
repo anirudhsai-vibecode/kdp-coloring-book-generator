@@ -95,12 +95,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--max-regen",
         type=int,
-        default=3,
+        default=0,
         metavar="N",
         help=(
-            "Hard cap of exit-gate FAIL regenerations per page (default 3). "
-            "After N FAILs, force-save the last attempt as the page final with a loud "
-            "WARNING and continue. Pass 0 for unlimited until PASS."
+            "Hard cap of exit-gate FAIL regenerations per page. Default 0 = unlimited "
+            "until exit-gate PASS (no force-save). Pass N>0 to opt in to a CF-conservation "
+            "cap: after N FAILs, force-save the last attempt as the page final."
         ),
     )
     p.add_argument(
@@ -450,12 +450,12 @@ def generate_page_until_pass(
     theme_key: str,
     theme: dict,
 ) -> None:
-    """Generate a page until exit-gate PASS or the hard regen cap is reached.
+    """Generate a page until exit-gate PASS (default) or an opt-in regen cap.
 
     Raises CloudflarePausedError on CF quota exhaustion (all accounts).
-    A positive --max-regen hard-caps FAIL attempts; after the Nth FAIL, the
-    last attempt remains in ``out_img`` as the page final. ``0`` or ``None``
-    means unlimited attempts until PASS.
+    Default ``--max-regen 0`` = unlimited until PASS (no force-save).
+    A positive ``--max-regen`` hard-caps FAIL attempts; after the Nth FAIL, the
+    last attempt remains in ``out_img`` as the page final (CF-conservation opt-in).
     """
     # Pre-check theme lock before spending neurons
     ok, reason = check_theme_subject(subject, theme_key=theme_key, theme=theme, cfg=cfg)

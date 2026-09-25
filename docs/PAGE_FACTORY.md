@@ -36,11 +36,11 @@ python scripts/page_factory_exit_gate.py output/some-book/images \
 # Built into main generate path (default on)
 python main.py --pages 8 --theme ... --dry-run --auto-approve
 # --skip-exit-gate   # escape hatch only
-# --max-regen N      # hard cap after N FAILs; force-save last FAIL (default: 3; 0 = unlimited until PASS)
+# --max-regen N      # default 0 = unlimited until PASS; N>0 caps FAILs then force-save (opt-in)
 # --require-user-review (default) blocks packaging until USER_APPROVED.json
 ```
 
-`main.py` regenerates each page until the exit gate PASSes or the hard `--max-regen` cap is reached. With the default cap of 3, the last FAIL is force-saved as the page final after the third FAIL to conserve Cloudflare quota; `--max-regen 0` restores unlimited-until-PASS behavior.
+`main.py` regenerates each page until the exit gate PASSes. Default `--max-regen 0` = unlimited until PASS (no force-save). A positive `--max-regen N` is an opt-in CF-conservation cap: after N FAILs, force-save the last FAIL as the page final and continue.
 Every FAIL is copied to `failed_dump/page-NN-attempt-K.png`. On Cloudflare daily quota
 exhaustion (all accounts) → STATUS PAUSED. A final directory sweep runs before packaging.
 Exit code **1** means do not hand off to QA / resume after pause.
@@ -48,12 +48,22 @@ Exit code **1** means do not hand off to QA / resume after pause.
 
 ## AD FLOOR LOCKS (pipeline)
 
-1. **Hard regen cap** — default `--max-regen 3` caps exit-gate FAIL regenerations per page; after N FAILs, force-save the last FAIL as the page final to conserve Cloudflare quota and continue. `--max-regen 0` means unlimited until PASS.
+1. **Regen until PASS** — default `--max-regen 0` = unlimited exit-gate FAIL regenerations per page until PASS (no force-save). Opt-in `--max-regen N` (N>0) caps FAILs then force-saves the last FAIL as the page final (CF-conservation only).
 2. **Cloudflare only** — no Pollinations/HF fallback. Up to 3 CF account slots (`CLOUDFLARE_ACCOUNT_ID` / `_2` / `_3`). On HTTP 429 code 4006, rotate to the next account.
 3. **failed_dump/** — every exit-gate FAIL is saved as `page-NN-attempt-K.png` (+ `manifest.json`). After all pages PASS, packaging waits for user/AD review (`USER_APPROVED.json` or `--auto-approve`).
 4. **Theme lock** — subjects/props must stay in-theme (e.g. pets rejects garden/jar-as-main-subject). Hard fail before final.
 
 
-## Desolidify (default postprocess)
+## Desolidify / solid-stroke (default postprocess)
 
-Default `postprocess_line_art` is **gentle-only** (threshold + cleanup). It never auto-falls back to `postprocess_line_art_heavy` (legacy/opt-in only — mid-gray→heavy produced hollow ribbon strokes). Gentle path still runs **desolidify** + print-canvas fit (2550×3300, 0.5″ margin). Large true solid fills (>~2% page) become thick kid outlines via morph-ring hollow (thickness max(6, min(h,w)//400)); already stroke-like components are skipped so desolidify does not double-ring outlines. Pupils/small strokes are kept. Callers should reject high mid-gray raws (`ribbon_risk` / mid_frac>0.08) and regen rather than invoking heavy.
+Default `postprocess_line_art` is **gentle-only** (threshold + cleanup). It never auto-falls back to `postprocess_line_art_heavy` (legacy/opt-in only — mid-gray→heavy produced hollow ribbon strokes). Gentle path runs **solid-stroke desolidify** + print-canvas fit (2550×3300, 0.5″ margin).
+
+**Morph-ring (fill − erode) is removed** — on thick stroke-like blobs or already-outline art it created hollow double-outline ribbons (QA hard FAIL). Current behavior:
+
+- Stroke-like / outline networks (low bbox fill-ratio or high peri²/area) → kept as solid ink
+- True compact solid fills (>~2% page) → distance-transform band of width W≥8 (single solid annulus)
+- Pupils / small strokes → kept
+- `ribbon_risk` rejects hollow tubes (high morph-gradient / close-fill of white channels)
+- On `solid_fills` exit-gate FAIL → reject attempt and regen (default unlimited until PASS); do not invent rings
+
+Callers should reject high mid-gray raws (`ribbon_risk` / mid_frac>0.08) and regen rather than invoking heavy.

@@ -34,61 +34,81 @@ _SOLID_AREA_FRAC = 0.02
 def _is_stroke_like(mask_cc: np.ndarray, area: int) -> bool:
     """True if component looks like stroke/outline art (do NOT desolidify → ribbons).
 
-    Primary: after 1–2 erosions ink is nearly gone (true solids keep a fat core).
-    Secondary: high perimeter²/area ONLY when erosion already removed most mass
-    (complex solid silhouettes have high peri but rem2/area stays high — keep those).
+    Thick connected outline networks survive 1–2 erosions, so rem-only checks are not
+    enough. Also treat low bbox fill-ratio or high perimeter²/area as stroke-like.
     """
     u8 = (mask_cc.astype(np.uint8)) * 255
-    # After 1–2 erosions, stroke art vanishes; true solid fills keep a core.
     eroded1 = cv2.erode(u8, np.ones((3, 3), np.uint8), iterations=1)
     eroded2 = cv2.erode(u8, np.ones((3, 3), np.uint8), iterations=2)
     rem1 = int(np.count_nonzero(eroded1))
     rem2 = int(np.count_nonzero(eroded2))
     if rem2 < max(80, int(0.05 * area)) or rem1 < max(120, int(0.12 * area)):
         return True
-    # Thin rings / double-outline ribbons: high peri AND little surviving core
-    if rem2 < int(0.35 * area):
-        cnts, _ = cv2.findContours(u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        if not cnts:
-            return True
-        peri = float(sum(cv2.arcLength(c, True) for c in cnts))
-        if peri > 0 and (peri * peri) / max(area, 1) > 200.0:
-            return True
+    ys, xs = np.where(mask_cc)
+    if len(xs) == 0:
+        return True
+    bw = int(xs.max() - xs.min() + 1)
+    bh = int(ys.max() - ys.min() + 1)
+    fill_ratio = area / max(1, bw * bh)
+    # Sparse / elongated ink over bbox → outline network, not a paint-bucket fill
+    if fill_ratio < 0.35:
+        return True
+    cnts, _ = cv2.findContours(u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return True
+    peri = float(sum(cv2.arcLength(c, True) for c in cnts))
+    peri2_over_area = (peri * peri) / max(area, 1) if peri > 0 else 0.0
+    if peri2_over_area > 100.0:
+        return True
+    # Thick stroke tubes: deeper erosion removes a large fraction of mass
+    rem4 = int(np.count_nonzero(cv2.erode(u8, np.ones((3, 3), np.uint8), iterations=4)))
+    if rem4 < int(0.25 * area):
+        return True
     return False
 
 
 def _is_filled_region(mask_cc: np.ndarray, area: int) -> bool:
-    """Heuristic: True if connected component is a solid blob (not a thin stroke)."""
+    """True only for compact solid paint-bucket blobs (not thick stroke networks)."""
     if _is_stroke_like(mask_cc, area):
         return False
     u8 = (mask_cc.astype(np.uint8)) * 255
     eroded = cv2.erode(u8, np.ones((3, 3), np.uint8), iterations=2)
-    if int(np.count_nonzero(eroded)) > max(500, int(0.15 * area)):
-        return True
     ys, xs = np.where(mask_cc)
     if len(xs) == 0:
         return False
     bw = int(xs.max() - xs.min() + 1)
     bh = int(ys.max() - ys.min() + 1)
-    return (area / max(1, bw * bh)) > 0.55 and bw >= 40 and bh >= 40
+    fill_ratio = area / max(1, bw * bh)
+    if int(np.count_nonzero(eroded)) > max(500, int(0.15 * area)) and fill_ratio > 0.40:
+        return True
+    return fill_ratio > 0.55 and bw >= 40 and bh >= 40
 
 
 def desolidify_ink(ink255: np.ndarray, *, page_h: int | None = None, page_w: int | None = None) -> np.ndarray:
-    """Hollow large solid black fills into outlines (AD FLOOR: bake into default postprocess).
+    """Convert true solid fills to SOLID thick outline strokes (no hollow ribbons).
 
-    ink255: white=255 on ink pixels (OpenCV binary convention). Small blobs (pupils,
-    thin strokes) are preserved; components > ~2% of page that look filled become rings.
-    Already stroke-like components are never hollowed (avoids double-outline ribbons).
-    Kid stroke thickness >= max(6, min(h,w)//280).
+    ink255: white=255 on ink pixels (OpenCV binary convention).
+
+    Morph-ring (fill − erode) is REMOVED from the default path — on thick stroke-like
+    blobs or already-outline art it produced hollow double-outline ribbons.
+
+    Pipeline per large CC (>~2% page):
+      - stroke-like / outline networks → keep as-is (solid ink)
+      - compact solid fills → distance-transform band of width W≥8 (single solid
+        annulus, not thin dual-edge contour draw)
+      - small blobs (pupils) → keep
+
+    If no true fills exist, this is effectively identity (solid strokes preserved).
+    Callers should still reject mid-gray raws / ribbon_risk and regen on solid_fills
+    exit-gate FAIL rather than inventing rings.
     """
     h, w = ink255.shape[:2]
     thr_area = int(_SOLID_AREA_FRAC * h * w)
-    # Kid stroke floor 6; //400 keeps rings thin enough that QA solid_fills won't
-    # mistake them for fills (//280 ≈11px rings false-positive as solid_fills).
-    thickness = max(6, min(page_h or h, page_w or w) // 400)
+    # Solid annulus width for true fills (kid-friendly single stroke)
+    thickness = max(8, min(page_h or h, page_w or w) // 320)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(ink255, connectivity=8)
     out = np.zeros_like(ink255)
-    hollowed = 0
+    converted = 0
     skipped_stroke = 0
     for i in range(1, n):
         area = int(stats[i, cv2.CC_STAT_AREA])
@@ -98,25 +118,24 @@ def desolidify_ink(ink255: np.ndarray, *, page_h: int | None = None, page_w: int
             skipped_stroke += 1
             continue
         if area > thr_area and _is_filled_region(cc, area):
-            # Morphological ring: subtract eroded core (contour-draw fills complex blobs → ribbons)
             u8 = (cc.astype(np.uint8)) * 255
-            k = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-            # iters so ring width ≈ thickness px (3x3 erode ≈1px/iter each side)
-            iters = max(2, (thickness + 1) // 2)
-            core = cv2.erode(u8, k, iterations=iters)
-            ring = cv2.subtract(u8, core)
-            # If core vanished entirely (shape too thin), keep original — do not invent ribbons
-            if int(np.count_nonzero(core)) < max(50, int(0.02 * area)):
+            # Distance-transform band: pixels within `thickness` of the outer edge
+            # form a SINGLE solid annulus (not dual thin walls from morph-ring on tubes).
+            dist = cv2.distanceTransform(u8, cv2.DIST_L2, 5)
+            band = (dist > 0) & (dist <= float(thickness))
+            band_count = int(np.count_nonzero(band))
+            # If band is degenerate, keep original rather than invent ribbons
+            if band_count < max(50, int(0.01 * area)):
                 out[cc] = 255
             else:
-                out[ring > 0] = 255
-                hollowed += 1
+                out[band] = 255
+                converted += 1
         else:
             out[cc] = 255
-    if hollowed or skipped_stroke:
+    if converted or skipped_stroke:
         logger.info(
-            "desolidify: hollowed %s large solid fill(s); skipped %s stroke-like",
-            hollowed,
+            "desolidify: solid-stroke band on %s fill(s); skipped %s stroke-like",
+            converted,
             skipped_stroke,
         )
     return out
@@ -129,7 +148,7 @@ def fit_print_canvas(
     height: int = _PRINT_H,
     margin: int = _MARGIN_PX,
 ) -> Image.Image:
-    """Center content on 2550×3300 with safe margin; 1-bit black-on-white; desolidify."""
+    """Center content on 2550×3300 with safe margin; 1-bit black-on-white; solid-stroke desolidify."""
     gray = np.asarray(img.convert("L"))
     if gray.shape != (height, width):
         gray = np.asarray(img.resize((width, height), Image.Resampling.LANCZOS).convert("L"))
@@ -175,38 +194,43 @@ def mid_gray_frac(img: Image.Image) -> float:
 
 
 def ribbon_risk(raw_or_processed: Image.Image) -> bool:
-    """True if image would have taken the legacy heavy path OR looks like thin double contours.
+    """True if image would have taken the legacy heavy path OR looks like hollow ribbons.
 
     Used by regen scripts to reject attempts before saving as final:
       - mid-gray frac on input > ~0.08 (legacy heavy trigger), OR
-      - processed ink looks like thin parallel double-outline ribbons.
+      - processed ink looks like thin parallel double-outline / hollow tubes.
+    Solid thick strokes keep a core under mild erosion and have low morph-gradient
+    relative to ink; hollow ribbons are mostly edge ink (high grad/ink) and their
+    white channels fill under a small close.
     """
     gray = np.asarray(raw_or_processed.convert("L"))
     mid = float(np.mean((gray >= 40) & (gray <= 220)))
     if mid > 0.08:
         return True
-    # Binary ink (black strokes on white)
     ink = ((gray < 128).astype(np.uint8)) * 255
-    ink_frac = float(np.mean(ink > 0))
+    n_ink = int(np.count_nonzero(ink))
+    ink_frac = float(n_ink) / max(1, gray.size)
     if ink_frac < 0.005:
         return False
-    # Distance-transform ridge: thin parallel double contours leave two close ink walls
-    # with a narrow white channel. Count ink pixels that have a nearby parallel twin.
-    inv = 255 - ink
-    # Erode once: true solid thick strokes keep core; hollow ribbons vanish fast.
     eroded = cv2.erode(ink, np.ones((3, 3), np.uint8), iterations=2)
-    rem = float(np.count_nonzero(eroded)) / max(1, int(np.count_nonzero(ink)))
-    if rem < 0.15 and ink_frac > 0.02:
-        # Most ink vanished after 2 erosions → thin/hollow strokes (ribbon-like)
-        # Confirm with hole/ring density via morphology gradient
-        grad = cv2.morphologyEx(ink, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8))
-        grad_frac = float(np.mean(grad > 0))
-        if grad_frac > 0.6 * ink_frac:
-            return True
-    # Parallel double-contour: closing thin gaps between twin strokes floods a lot
-    closed = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=1)
+    rem = float(np.count_nonzero(eroded)) / max(1, n_ink)
+    grad = cv2.morphologyEx(ink, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8))
+    grad_frac = float(np.mean(grad > 0))
+    grad_ratio = grad_frac / max(ink_frac, 1e-9)
+    # Close fills the white channel between twin ribbon walls
+    closed = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((7, 7), np.uint8), iterations=1)
     gained = float(np.count_nonzero((closed > 0) & (ink == 0))) / max(1, gray.size)
-    if gained > 0.015 and rem < 0.25:
+
+    # Classic: most ink vanishes after 2 erosions + edge-dominated
+    if rem < 0.15 and ink_frac > 0.02 and grad_ratio > 0.6:
+        return True
+    # Hollow tubes with residual solid blobs (eyes): rem stays moderate but
+    # morph-gradient dominates and closing floods ribbon channels.
+    if ink_frac > 0.015 and grad_ratio > 0.70 and gained > 0.004:
+        return True
+    if ink_frac > 0.015 and rem < 0.60 and grad_ratio > 0.75:
+        return True
+    if gained > 0.012 and rem < 0.35:
         return True
     return False
 
@@ -261,7 +285,7 @@ def postprocess_line_art(img: Image.Image) -> Image.Image:
 
     result = np.full_like(cleaned, 255)
     result[cleaned > 0] = 0
-    # AD FLOOR: desolidify + print canvas fit (stops solid_fills CF burn)
+    # AD FLOOR: solid-stroke desolidify + print canvas fit (no morph-ring ribbons)
     return fit_print_canvas(Image.fromarray(result).convert("RGB"), width=w, height=h)
 
 
