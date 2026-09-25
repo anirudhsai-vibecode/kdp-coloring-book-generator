@@ -31,8 +31,33 @@ _MARGIN_PX = 150  # 0.5″ @ 300 DPI
 _SOLID_AREA_FRAC = 0.02
 
 
+def _is_stroke_like(mask_cc: np.ndarray, area: int) -> bool:
+    """True if component looks like stroke/outline art (do NOT desolidify → ribbons).
+
+    Skip when 1–2 erosions erase nearly all ink, or perimeter²/area is high (thin rings).
+    """
+    u8 = (mask_cc.astype(np.uint8)) * 255
+    # After 1–2 erosions, stroke art vanishes; true solid fills keep a core.
+    eroded1 = cv2.erode(u8, np.ones((3, 3), np.uint8), iterations=1)
+    eroded2 = cv2.erode(u8, np.ones((3, 3), np.uint8), iterations=2)
+    rem1 = int(np.count_nonzero(eroded1))
+    rem2 = int(np.count_nonzero(eroded2))
+    if rem2 < max(80, int(0.05 * area)) or rem1 < max(120, int(0.12 * area)):
+        return True
+    # High perimeter²/area → thin elongated / already-outline rings
+    cnts, _ = cv2.findContours(u8, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return True
+    peri = float(sum(cv2.arcLength(c, True) for c in cnts))
+    if peri > 0 and (peri * peri) / max(area, 1) > 80.0:
+        return True
+    return False
+
+
 def _is_filled_region(mask_cc: np.ndarray, area: int) -> bool:
     """Heuristic: True if connected component is a solid blob (not a thin stroke)."""
+    if _is_stroke_like(mask_cc, area):
+        return False
     u8 = (mask_cc.astype(np.uint8)) * 255
     eroded = cv2.erode(u8, np.ones((3, 3), np.uint8), iterations=2)
     if int(np.count_nonzero(eroded)) > max(500, int(0.15 * area)):
@@ -50,16 +75,24 @@ def desolidify_ink(ink255: np.ndarray, *, page_h: int | None = None, page_w: int
 
     ink255: white=255 on ink pixels (OpenCV binary convention). Small blobs (pupils,
     thin strokes) are preserved; components > ~2% of page that look filled become rings.
+    Already stroke-like components are never hollowed (avoids double-outline ribbons).
+    Kid stroke thickness >= max(6, min(h,w)//280).
     """
     h, w = ink255.shape[:2]
     thr_area = int(_SOLID_AREA_FRAC * h * w)
-    thickness = max(4, min(page_h or h, page_w or w) // 400)
+    # Prefer thicker kid stroke when hollowing true fills (was max(4, //400) → too thin/ribbony)
+    thickness = max(6, min(page_h or h, page_w or w) // 280)
     n, labels, stats, _ = cv2.connectedComponentsWithStats(ink255, connectivity=8)
     out = np.zeros_like(ink255)
     hollowed = 0
+    skipped_stroke = 0
     for i in range(1, n):
         area = int(stats[i, cv2.CC_STAT_AREA])
         cc = labels == i
+        if area > thr_area and _is_stroke_like(cc, area):
+            out[cc] = 255
+            skipped_stroke += 1
+            continue
         if area > thr_area and _is_filled_region(cc, area):
             cnts, _ = cv2.findContours(
                 (cc.astype(np.uint8) * 255), cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE
@@ -68,8 +101,12 @@ def desolidify_ink(ink255: np.ndarray, *, page_h: int | None = None, page_w: int
             hollowed += 1
         else:
             out[cc] = 255
-    if hollowed:
-        logger.info("desolidify: hollowed %s large solid fill(s)", hollowed)
+    if hollowed or skipped_stroke:
+        logger.info(
+            "desolidify: hollowed %s large solid fill(s); skipped %s stroke-like",
+            hollowed,
+            skipped_stroke,
+        )
     return out
 
 
@@ -119,15 +156,57 @@ def fit_print_canvas(
 
 
 
+def mid_gray_frac(img: Image.Image) -> float:
+    """Fraction of pixels in mid-gray band [40, 220] (raw or processed RGB/L)."""
+    gray = np.asarray(img.convert("L"))
+    return float(np.mean((gray >= 40) & (gray <= 220)))
+
+
+def ribbon_risk(raw_or_processed: Image.Image) -> bool:
+    """True if image would have taken the legacy heavy path OR looks like thin double contours.
+
+    Used by regen scripts to reject attempts before saving as final:
+      - mid-gray frac on input > ~0.08 (legacy heavy trigger), OR
+      - processed ink looks like thin parallel double-outline ribbons.
+    """
+    gray = np.asarray(raw_or_processed.convert("L"))
+    mid = float(np.mean((gray >= 40) & (gray <= 220)))
+    if mid > 0.08:
+        return True
+    # Binary ink (black strokes on white)
+    ink = ((gray < 128).astype(np.uint8)) * 255
+    ink_frac = float(np.mean(ink > 0))
+    if ink_frac < 0.005:
+        return False
+    # Distance-transform ridge: thin parallel double contours leave two close ink walls
+    # with a narrow white channel. Count ink pixels that have a nearby parallel twin.
+    inv = 255 - ink
+    # Erode once: true solid thick strokes keep core; hollow ribbons vanish fast.
+    eroded = cv2.erode(ink, np.ones((3, 3), np.uint8), iterations=2)
+    rem = float(np.count_nonzero(eroded)) / max(1, int(np.count_nonzero(ink)))
+    if rem < 0.15 and ink_frac > 0.02:
+        # Most ink vanished after 2 erosions → thin/hollow strokes (ribbon-like)
+        # Confirm with hole/ring density via morphology gradient
+        grad = cv2.morphologyEx(ink, cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8))
+        grad_frac = float(np.mean(grad > 0))
+        if grad_frac > 0.6 * ink_frac:
+            return True
+    # Parallel double-contour: closing thin gaps between twin strokes floods a lot
+    closed = cv2.morphologyEx(ink, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8), iterations=1)
+    gained = float(np.count_nonzero((closed > 0) & (ink == 0))) / max(1, gray.size)
+    if gained > 0.015 and rem < 0.25:
+        return True
+    return False
+
+
 def postprocess_line_art(img: Image.Image) -> Image.Image:
     """
     Gentle B&W cleanup for already-clean FLUX / line-art outputs.
 
     Thresholds near-black strokes to pure black on pure white, whites out border
-    (and Pollinations watermark corner), and drops tiny speckles. Avoids the
-    heavy contour/Canny pipeline that doubles lines and jaggedizes clean art.
-    Falls back to postprocess_line_art_heavy if the page is mostly mid-gray
-    (shaded fills) rather than line art.
+    (and Pollinations watermark corner), and drops tiny speckles. Always uses the
+    gentle threshold path — never falls back to postprocess_line_art_heavy
+    (legacy/opt-in only; mid-gray heavy path caused hollow ribbon strokes).
     """
     rgb = np.asarray(img.convert("RGB"))
     gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
@@ -144,11 +223,13 @@ def postprocess_line_art(img: Image.Image) -> Image.Image:
     corner_w = max(1, int(round(w * 0.25)))
     gray[h - corner_h :, w - corner_w :] = 255
 
-    # Mid-gray mass → shaded art; use heavy outline extractor instead
     mid_frac = float(np.mean((gray >= 40) & (gray <= 220)))
     if mid_frac > 0.08:
-        logger.info("Gentle postprocess: mid-gray %.1f%% — falling back to heavy outline extractor", mid_frac * 100)
-        return postprocess_line_art_heavy(img)
+        # Do NOT call heavy — ribbon risk. Callers should reject/regen instead.
+        logger.warning(
+            "Gentle postprocess: mid-gray %.1f%% — staying on gentle path (heavy disabled)",
+            mid_frac * 100,
+        )
 
     # thr=160 matches prior gentle reference (~99.98% agreement)
     _, binary = cv2.threshold(gray, 160, 255, cv2.THRESH_BINARY_INV)
@@ -174,7 +255,9 @@ def postprocess_line_art(img: Image.Image) -> Image.Image:
 
 def postprocess_line_art_heavy(img: Image.Image) -> Image.Image:
     """
-    LEGACY heavy OpenCV outline extractor. Prefer postprocess_line_art() for clean FLUX line art.
+    LEGACY / OPT-IN ONLY heavy OpenCV outline extractor. Not called by default postprocess.
+    Prefer postprocess_line_art() (gentle-only). Mid-gray auto-fallback was removed — it
+    produced hollow double-outline ribbons.
 
     Designed for ages 3–7: mostly white page, continuous black outlines, open
     interiors to color. Never hard-binarizes shading into solid black fills.

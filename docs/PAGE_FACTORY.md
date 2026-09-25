@@ -56,4 +56,4 @@ Exit code **1** means do not hand off to QA / resume after pause.
 
 ## Desolidify (default postprocess)
 
-`postprocess_line_art` / heavy path always run **desolidify** + print-canvas fit (2550×3300, 0.5″ margin) before save. Large solid black fills (>~2% page) become thick outlines; pupils/small strokes are kept. This avoids burning Cloudflare neurons on exit-gate `solid_fills` FAILs.
+Default `postprocess_line_art` is **gentle-only** (threshold + cleanup). It never auto-falls back to `postprocess_line_art_heavy` (legacy/opt-in only — mid-gray→heavy produced hollow ribbon strokes). Gentle path still runs **desolidify** + print-canvas fit (2550×3300, 0.5″ margin). Large true solid fills (>~2% page) become thick kid outlines (thickness ≥ max(6, min(h,w)//280)); already stroke-like components are skipped so desolidify does not double-ring outlines. Pupils/small strokes are kept. Callers should reject high mid-gray raws (`ribbon_risk` / mid_frac>0.08) and regen rather than invoking heavy.
