@@ -19,6 +19,17 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Sequence
 
+# Detail strings use Unicode (×, ≤, ≥, —, →); on Windows the default console
+# codepage is cp1252, so a single print() raises UnicodeEncodeError and the
+# whole gate aborts before any result is reported. Reconfigure stdout/stderr
+# to UTF-8 at startup so results always surface.
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
 import numpy as np
 from PIL import Image
 
