@@ -1,0 +1,38 @@
+# Fly.io configuration for KDP Coloring Book Generator
+app = "kdp-coloring-book-generator"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PYTHONUNBUFFERED = "1"
+  PORT = "8000"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = true
+  auto_start_machines = true
+  min_machines_running = 0
+  processes = ["app"]
+
+[[vm]]
+  cpu_kind = "shared"
+  cpus = 1
+  memory = "512mb"
+
+# Redis for RQ queue
+[services.redis]
+  enabled = true
+
+# Optional: PostgreSQL for persistent metadata (can add later)
+# [services.postgresql]
+#   enabled = true
+
+# Health checks
+[[services.tcp_checks]]
+  interval = "10s"
+  timeout = "5s"
+  grace_period = "30s"
+  port = 8000

@@ -8,3 +8,12 @@ numpy>=1.24.0
 pypdf>=4.0.0
 # Optional: cover barcode-zone + interior page-number raster checks
 # pdf2image>=1.17.0  # also needs poppler-utils on the host
+
+# FastAPI + Redis/RQ
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+redis>=5.0.0
+rq>=1.16.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+python-multipart>=0.0.9
