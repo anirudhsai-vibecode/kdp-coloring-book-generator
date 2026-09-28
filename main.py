@@ -14,6 +14,17 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+# Detail strings use Unicode (—, →, ≤, ≥, ×); on Windows the default console
+# codepage is cp1252, so a single print() raises UnicodeEncodeError and the
+# whole run aborts with no result. Reconfigure stdout/stderr to UTF-8 at
+# startup so results always surface. (Same fix as qa_gate.py ISSUE-001.)
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
 # Ensure src/ is on path when running as script
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))

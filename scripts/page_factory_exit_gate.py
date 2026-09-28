@@ -25,6 +25,16 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Detail strings use Unicode (→, —); on Windows the default console codepage
+# is cp1252, so a single print() raises UnicodeEncodeError. Reconfigure
+# stdout/stderr to UTF-8 at startup. (Same fix as qa_gate.py ISSUE-001.)
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+        sys.stderr.reconfigure(encoding="utf-8")  # type: ignore[attr-defined]
+    except Exception:
+        pass
+
 ROOT = Path(__file__).resolve().parent.parent
 QA_GATE = ROOT / "scripts" / "qa_gate.py"
 
