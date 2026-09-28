@@ -302,6 +302,9 @@ def build_prompt(
     if remaining < 0:
         # Extreme case — keep intro + theme, trim anatomy.
         core = _join([p for p in [intro, theme_c] if p])
+        if len(core) > max_chars:
+            # Even intro+theme exceeds limit — hard-trim the subject
+            return _trim_words(core, max_chars)
         if anatomy:
             budget = max_chars - len(core) - 1
             return _join([core, _trim_words(anatomy, budget)])
