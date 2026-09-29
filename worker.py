@@ -41,17 +41,6 @@ async def health_check():
     return {"status": "healthy", "service": "kdp-coloring-book-worker"}
 
 
-def run_worker():
-    """Run the RQ worker."""
-    logger.info("Starting RQ worker for queue: %s", settings.rq_queue_name)
-    logger.info("Redis URL: %s", settings.redis_url)
-
-    redis_conn = get_redis_connection()
-    worker = SimpleWorker([settings.rq_queue_name], connection=redis_conn)
-    logger.info("Worker started, listening for jobs...")
-    worker.work()
-
-
 def check_paused_jobs():
     """Background task to check for paused jobs due to quota and resume them if ready."""
     quota_logger = logging.getLogger(__name__ + ".quota_checker")
@@ -113,17 +102,28 @@ def get_job(job_id: str) -> Job | None:
         return None
 
 
+def run_health_server():
+    """Run the health endpoint server in a separate thread."""
+    port = int(settings.app_port)
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+
 if __name__ == "__main__":
-    # Start RQ worker in background thread
-    worker_thread = threading.Thread(target=run_worker, daemon=True)
-    worker_thread.start()
-    logger.info("RQ worker thread started")
+    # Start health endpoint server in background thread
+    health_thread = threading.Thread(target=run_health_server, daemon=True)
+    health_thread.start()
+    logger.info("Health endpoint server started on port %s", settings.app_port)
 
     # Start quota checker thread
     checker_thread = threading.Thread(target=check_paused_jobs, daemon=True)
     checker_thread.start()
     logger.info("Quota checker thread started")
 
-    # Run health endpoint on port from environment
-    port = int(settings.app_port)
-    uvicorn.run(app, host="0.0.0.0", port=port)
+    # Run RQ worker in MAIN thread (required for signal handlers)
+    logger.info("Starting RQ worker for queue: %s", settings.rq_queue_name)
+    logger.info("Redis URL: %s", settings.redis_url)
+
+    redis_conn = get_redis_connection()
+    worker = SimpleWorker([settings.rq_queue_name], connection=redis_conn)
+    logger.info("Worker started, listening for jobs...")
+    worker.work()
