@@ -27,7 +27,7 @@ from app.models.schemas import (
     ThemesResponse,
 )
 from app.models.user import User
-from app.middleware.auth import get_current_user
+from app.middleware.auth import get_current_user, security
 from kdp_coloring.themes import load_themes, list_theme_keys
 
 router = APIRouter(prefix="/api/v1", tags=["books"])
@@ -186,7 +186,7 @@ async def get_book_progress(job_id: str, user: User = Depends(get_current_user))
 
 
 @router.get("/books", response_model=list[JobResponse])
-async def list_user_jobs(user: User = Depends(security)) -> list[JobResponse]:
+async def list_user_jobs(user: User = Depends(get_current_user)) -> list[JobResponse]:
     """List all jobs for the current user."""
     job_ids = get_user_jobs(user.id)
     jobs = []
