@@ -105,6 +105,53 @@ async def create_book(request: CreateBookRequest, background_tasks: BackgroundTa
 
 
 @router.get("/books/{job_id}", response_model=JobResponse)
+
+@router.post("/auth/lookup", response_model=JobResponse)
+async def lookup_job(job_id: str, user: User = Depends(get_current_user)):
+    """Lookup a job by ID (requires authentication).
+
+    This endpoint allows users to find any job by its ID, but only if they are
+    authenticated. The job ownership check ensures users can only see jobs they
+    created.
+    """
+    job = get_job(job_id)
+    if not job:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Job {job_id} not found",
+        )
+    # Ownership check
+    if job.meta.get("user_id") != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Job does not belong to current user",
+        )
+    job_status = job.get_status()
+    now = datetime.now()
+    status_map = {
+        "queued": JobStatus.QUEUED,
+        "started": JobStatus.RUNNING,
+        "finished": JobStatus.COMPLETED,
+        "failed": JobStatus.FAILED,
+        "deferred": JobStatus.QUEUED,
+    }
+    mapped_status = status_map.get(job_status, JobStatus.QUEUED)
+    if job.meta.get("status") == "awaiting_review":
+        mapped_status = JobStatus.AWAITING_REVIEW
+    metadata = None
+    if job.result and isinstance(job.result, dict):
+        meta = job.result.get("metadata")
+        if meta:
+            metadata = BookMetadata(**meta)
+    return JobResponse(
+        job_id=job.id,
+        status=mapped_status,
+        message=job.meta.get("message", ""),
+        created_at=job.created_at or now,
+        updated_at=job.ended_at or job.started_at or now,
+        metadata=metadata,
+        error=job.exc_info,
+    )
 async def get_book_job(job_id: str, user: User = Depends(get_current_user)) -> JobResponse:
     """Get job status and result."""
     job = get_job(job_id)

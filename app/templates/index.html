@@ -5,86 +5,233 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>KDP Coloring Book Generator</title>
   <style>
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
-    .container { max-width: 800px; margin: 0 auto; padding: 24px; }
-    header { text-align: center; margin-bottom: 32px; }
-    h1 { color: #1a1a1a; font-size: 2rem; font-weight: 700; }
-    .subtitle { color: #666; margin-top: 8px; }
-    .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 24px; }
-    .card h2 { font-size: 1.25rem; margin-bottom: 16px; color: #1a1a1a; }
-    .form-group { margin-bottom: 16px; }
-    label { display: block; font-weight: 500; margin-bottom: 6px; color: #333; }
-    select, input[type="number"], input[type="text"] {
-      width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px;
-      font-size: 1rem; transition: border-color 0.2s;
+    :root {
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --success: #10b981;
+      --danger: #dc2626;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
     }
-    select:focus, input:focus { outline: none; border-color: #2563eb; }
-    .checkbox-group { display: flex; align-items: center; gap: 8px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--gray-50);
+      min-height: 100vh;
+      color: var(--gray-800);
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 1rem; }
+    header { text-align: center; margin-bottom: 1.5rem; }
+    h1 { color: var(--gray-900); font-size: 2rem; font-weight: 700; }
+    .subtitle { color: var(--gray-500); margin-top: .5rem; }
+    .card {
+      background: white;
+      border-radius: .5rem;
+      box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { font-size: 1.25rem; margin-bottom: 1rem; color: var(--gray-800); }
+    .form-group { margin-bottom: 1rem; }
+    label { display: block; font-weight: 600; margin-bottom: .25rem; color: var(--gray-700); }
+    select,
+    input[type="number"],
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      padding: .5rem .75rem;
+      border: 1px solid var(--gray-300);
+      border-radius: .375rem;
+      font-size: 1rem;
+      transition: border-color .15s, box-shadow .15s;
+    }
+    select:focus,
+    input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(37,99,235,.25);
+    }
+    .checkbox-group {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+    }
     .checkbox-group input { width: auto; }
     .btn {
-      padding: 12px 24px; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600;
-      cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+      display: inline-block;
+      padding: .5rem 1rem;
+      border: none;
+      border-radius: .375rem;
+      font-size: .875rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity .15s, transform .05s;
     }
-    .btn:active { transform: scale(0.98); }
-    .btn-primary { background: #2563eb; color: white; width: 100%; }
-    .btn-primary:hover { opacity: 0.9; }
-    .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
-    .btn-secondary { background: #e2e8f0; color: #334155; }
-    .job-status { display: none; }
-    .job-status.active { display: block; }
-    .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin: 16px 0; }
-    .progress-fill { height: 100%; background: #2563eb; width: 0%; transition: width 0.3s; }
-    .status-text { color: #666; font-size: 0.9rem; margin-bottom: 8px; }
-    .download-links { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+    .btn:active { transform: scale(.97); }
+    .btn-primary {
+      background: var(--primary);
+      color: white;
+    }
+    .btn-primary:hover { opacity: .9; }
+    .btn-primary:disabled {
+      background: var(--gray-300);
+      cursor: not-allowed;
+    }
+    .btn-secondary {
+      background: var(--gray-200);
+      color: var(--gray-800);
+    }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--gray-300);
+      color: var(--gray-700);
+    }
+    .btn-outline:hover { background: var(--gray-100); }
+    .progress-bar {
+      height: .5rem;
+      background: var(--gray-200);
+      border-radius: .25rem;
+      overflow: hidden;
+      margin: 1rem 0;
+    }
+    .progress-fill {
+      height: 100%;
+      background: var(--primary);
+      width: 0%;
+      transition: width .3s ease;
+    }
+    .status-text { color: var(--gray-500); font-size: .875rem; margin-bottom: .5rem; }
+    .download-links { display: flex; gap: .75rem; flex-wrap: wrap; margin-top: 1rem; }
     .download-links a {
-      padding: 10px 20px; background: #2563eb; color: white; text-decoration: none;
-      border-radius: 8px; font-weight: 500; transition: opacity 0.2s;
+      padding: .5rem 1rem;
+      background: var(--primary);
+      color: white;
+      text-decoration: none;
+      border-radius: .375rem;
+      font-weight: 500;
+      transition: opacity .15s;
     }
-    .download-links a:hover { opacity: 0.9; }
-    .download-links a.secondary { background: #10b981; }
-    .error { color: #dc2626; padding: 12px; background: #fef2f2; border-radius: 8px; margin-top: 16px; display: none; }
+    .download-links a:hover { opacity: .9; }
+    .download-links a.secondary { background: var(--success); }
+    .error {
+      color: var(--danger);
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      padding: .75rem;
+      border-radius: .375rem;
+      margin-top: 1rem;
+      display: none;
+    }
     .error.visible { display: block; }
-    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+    .spinner {
+      display: inline-block;
+      width: 1rem;
+      height: 1rem;
+      border: 2px solid #fff;
+      border-right-color: transparent;
+      border-radius: 50%;
+      animation: spin .8s linear infinite;
+      margin-right: .5rem;
+      vertical-align: middle;
+    }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .theme-badge {
-      display: inline-block; padding: 4px 10px; background: #e2e8f0; border-radius: 999px;
-      font-size: 0.8rem; color: #334155; margin: 2px;
+    .user-info { display: flex; align-items: center; gap: .75rem; margin-top: .5rem; }
+    .user-avatar {
+      width: 2.5rem;
+      height: 2.5rem;
+      background: var(--primary);
+      color: white;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: .875rem;
     }
-    .themes-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
-    .status-badge {
-      display: inline-block; padding: 2px 8px; border-radius: 999px;
-      font-size: 0.75rem; font-weight: 500;
+    .user-detail { flex: 1; }
+    .logout-btn {
+      background: transparent;
+      border: none;
+      color: var(--gray-500);
+      font-size: .875rem;
+      cursor: pointer;
+      padding: .25rem .5rem;
     }
-    .status-badge.valid { background: #d1fae5; color: #065f46; }
-    .status-badge.error { background: #fef2f2; color: #991b1b; }
-    .status-badge.untested { background: #e2e8f0; color: #334155; }
+    .logout-btn:hover { color: var(--danger); }
+    .credentials-list { margin-top: 1rem; }
+    .creds-empty {
+      color: var(--gray-400);
+      text-align: center;
+      padding: 1rem 0;
+    }
     .slot-row {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 10px 0; border-bottom: 1px solid #e2e8f0;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: .75rem 0;
+      border-bottom: 1px solid var(--gray-200);
     }
     .slot-row:last-child { border-bottom: none; }
-    .slot-info { flex: 1; }
-    .slot-label { font-weight: 600; color: #1a1a1a; }
-    .slot-acct { font-size: 0.85rem; color: #666; margin-top: 2px; font-family: monospace; }
-    .slot-actions { display: flex; gap: 8px; }
-    .btn-small {
-      padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.85rem;
-      cursor: pointer; font-weight: 500; transition: opacity 0.2s;
-    }
-    .btn-small:hover { opacity: 0.9; }
-    .btn-test { background: #dbeafe; color: #1e40af; }
-    .btn-delete { background: #fee2e2; color: #991b1b; }
-    .btn-small:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
-    .cred-submit-row { display: flex; gap: 12px; margin-top: 16px; }
-    .cred-submit-row .btn { flex: 1; padding: 10px; }
+    .slot-label { font-weight: 600; }
+    .slot-actions { display: flex; gap: .5rem; }
+    .slot-actions button { padding: .25rem .5rem; font-size: .75rem; }
+    .btn-test { background: var(--gray-100); color: var(--primary); }
+    .btn-delete { background: #fee2e2; color: var(--danger); }
+    .btn-test:hover { background: var(--gray-200); }
+    .btn-delete:hover { background: #fecaca; }
     .cred-success {
-      color: #059669; padding: 10px; background: #ecfdf5; border-radius: 8px;
-      margin-top: 12px; font-size: 0.9rem; display: none;
+      color: var(--success);
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      padding: .5rem .75rem;
+      border-radius: .375rem;
+      margin-top: .5rem;
+      display: none;
     }
     .cred-success.visible { display: block; }
-    .cred-hint { font-size: 0.8rem; color: #94a3b8; margin-top: 6px; }
-    .creds-empty { color: #94a3b8; text-align: center; padding: 16px 0; font-size: 0.9rem; }
+    .cred-hint { font-size: .75rem; color: var(--gray-400); margin-top: .5rem; }
+    .job-status { display: none; }
+    .job-status.active { display: block; }
+    .status-badge {
+      display: inline-block;
+      padding: .25rem .5rem;
+      border-radius: .375rem;
+      font-size: .75rem;
+      font-weight: 500;
+    }
+    .status-badge.valid { background: #d1fae5; color: var(--gray-800); }
+    .status-badge.error { background: #fef2f2; color: var(--danger); }
+    .status-badge.paused { background: #fffbdd; color: #92400e; }
+    .theme-badge {
+      display: inline-block;
+      padding: .25rem .5rem;
+      background: var(--gray-100);
+      border-radius: 9999px;
+      font-size: .75rem;
+      color: var(--gray-600);
+      margin: .25rem;
+    }
+    .themes-grid { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .5rem; }
+    .lookup-result {
+      margin-top: 1rem;
+      padding: .75rem;
+      border-radius: .375rem;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      min-height: 2rem;
+    }
+    .lookup-result.loading { color: var(--gray-500); font-style: italic; }
+    .lookup-result.error { background: #fef2f2; border-color: #fecaca; color: var(--danger); }
+    .lookup-result.success { background: #f0fdf4; border-color: #bbf7d0; color: var(--gray-800); }
   </style>
 </head>
 <body>
@@ -94,101 +241,220 @@
       <p class="subtitle">Generate print-ready coloring books for Amazon KDP</p>
     </header>
 
-    <div class="card">
-      <h2>Create New Book</h2>
-      <form id="book-form">
+    <!-- User bar -->
+    <div id="user-bar" class="card" style="display:none; justify-content:space-between; align-items:center;">
+      <div class="user-info" id="user-info">
+        <div class="user-avatar" id="user-avatar">?</div>
+        <div class="user-detail">
+          <div id="user-email" class="font-medium"></div>
+          <div id="user-status" class="text-sm text-gray-500"></div>
+        </div>
+      </div>
+      <button id="logout-btn" class="logout-btn">Logout</button>
+    </div>
+
+    <!-- Login / Register Card -->
+    <div id="auth-card" class="card">
+      <h2>Login / Register</h2>
+      <form id="auth-form">
         <div class="form-group">
-          <label for="theme">Theme</label>
-          <select id="theme" required>
-            <option value="">Loading themes...</option>
-          </select>
+          <label for="auth-email">Email</label>
+          <input type="email" id="auth-email" required>
         </div>
-
         <div class="form-group">
-          <label for="pages">Pages (1-50)</label>
-          <input type="number" id="pages" min="1" max="50" value="25" required>
+          <label for="auth-password">Password</label>
+          <input type="password" id="auth-password" required>
         </div>
-
-        <div class="form-group">
-          <label for="author">Author Name</label>
-          <input type="text" id="author" placeholder="Your Name Here">
+        <div class="form-group" id="auth-toggle">
+          <button type="button" id="login-btn" class="btn btn-primary w-full">Login</button>
+          <button type="button" id="register-btn" class="btn btn-secondary w-full mt-2">Register</button>
         </div>
-
-        <div class="form-group">
-          <label for="seed">Seed (optional, for reproducibility)</label>
-          <input type="number" id="seed" min="0" placeholder="e.g., 42">
-        </div>
-
-        <div class="form-group checkbox-group">
-          <input type="checkbox" id="dry_run" checked>
-          <label for="dry_run">Dry run (placeholder images, no API calls)</label>
-        </div>
-
-        <div class="form-group checkbox-group">
-          <input type="checkbox" id="auto_approve" checked>
-          <label for="auto_approve">Auto-approve (skip manual review gate)</label>
-        </div>
-
-        <button type="submit" class="btn btn-primary" id="submit-btn">
-          <span class="btn-text">Generate Book</span>
-        </button>
-
-        <div class="error" id="error"></div>
+        <div class="error" id="auth-error"></div>
+        <p class="text-sm text-gray-500 mt-2" id="auth-switch">
+          Don't have an account? <span id="show-register" class="text-primary cursor-pointer">Register</span>
+        </p>
       </form>
     </div>
 
-    <div class="card">
-      <h2>Cloudflare Credentials</h2>
-      <p style="color: #666; margin-bottom: 16px; font-size: 0.9rem;">
-        Manage Cloudflare Workers AI accounts for image generation. Up to 3 accounts supported for rotation on daily quota.
-      </p>
-      <div id="credentials-list">
-        <div class="creds-empty">Loading credentials...</div>
+    <!-- Main App (hidden until login) -->
+    <div id="main-app" class="space-y-4" style="display:none;">
+      <!-- Create Book Card -->
+      <div class="card" id="create-book-card">
+        <h2>Create New Book</h2>
+        <form id="book-form">
+          <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <div>
+              <label for="theme">Theme</label>
+              <select id="theme" required>
+                <option value="">Loading themes…</option>
+              </select>
+            </div>
+            <div>
+              <label for="pages">Pages (1-50)</label>
+              <input type="number" id="pages" min="1" max="50" value="25" required>
+            </div>
+            <div>
+              <label for="author">Author Name</label>
+              <input type="text" id="author" placeholder="Your Name Here">
+            </div>
+            <div>
+              <label for="seed">Seed (optional)</label>
+              <input type="number" id="seed" min="0" placeholder="e.g., 42">
+            </div>
+          </div>
+          <div class="flex items-start gap-3">
+            <div class="flex items-start">
+              <input type="checkbox" id="dry_run" checked>
+            </div>
+            <div>
+              <label for="dry_run" class="cursor-pointer">Dry run (placeholder images, no API calls)</label>
+            </div>
+          </div>
+          <div class="flex items-start gap-3 mt-2">
+            <div class="flex items-start">
+              <input type="checkbox" id="auto_approve" checked>
+            </div>
+            <div>
+              <label for="auto_approve" class="cursor-pointer">Auto-approve (skip manual review)</label>
+            </div>
+          </div>
+          <button type="submit" id="submit-btn" class="btn btn-primary w-full mt-4">
+            <span id="submit-text">Generate Book</span>
+          </button>
+          <div class="error" id="book-error"></div>
+        </form>
       </div>
 
-      <form id="credentials-form" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
-        <div class="form-group">
-          <label for="new_account_id">Account ID</label>
-          <input type="text" id="new_account_id" placeholder="Cloudflare Account ID" required>
+      <!-- Cloudflare Credentials Card -->
+      <div class="card" id="cloudflare-card">
+        <h2>Cloudflare Credentials</h2>
+        <p class="text-sm text-gray-500">
+          Manage Cloudflare Workers AI accounts for image generation. Up to 3 accounts supported for rotation on daily quota.
+        </p>
+        <div id="credentials-list" class="credentials-list">
+          <div class="creds-empty">Loading credentials…</div>
         </div>
-        <div class="form-group">
-          <label for="new_api_token">API Token</label>
-          <input type="password" id="new_api_token" placeholder="Cloudflare API Token (Workers AI)" required>
-        </div>
-        <div class="cred-submit-row">
-          <button type="submit" class="btn btn-primary" id="test-cred-btn">Test & Save</button>
-        </div>
-        <div class="cred-hint">Test runs validation; on success, credentials are saved to the next available slot in .env</div>
-        <div class="cred-success" id="cred-success"></div>
-        <div class="error" id="cred-error"></div>
-      </form>
-    </div>
-
-    <div class="card job-status" id="job-status">
-      <h2>Job Progress</h2>
-      <div class="status-text" id="status-text">Initializing...</div>
-      <div class="progress-bar">
-        <div class="progress-fill" id="progress-fill"></div>
+        <form id="credentials-form" class="mt-4">
+          <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div>
+              <label for="new_account_id">Account ID</label>
+              <input type="text" id="new_account_id" placeholder="Cloudflare Account ID" required>
+            </div>
+            <div>
+              <label for="new_api_token">API Token</label>
+              <input type="password" id="new_api_token" placeholder="Cloudflare API Token (Workers AI)" required>
+            </div>
+          </div>
+          <div class="mt-3 flex justify-end">
+            <button type="submit" id="test-cred-btn" class="btn btn-primary">
+              Test & Save
+            </button>
+          </div>
+          <div class="cred-hint mt-2">
+            Test runs validation; on success, credentials are saved to the next available slot in .env
+          </div>
+          <div class="cred-success" id="cred-success"></div>
+          <div class="error" id="cred-error"></div>
+        </form>
       </div>
-      <div class="status-text" id="detail-text">Waiting for worker...</div>
 
-      <div class="download-links" id="download-links"></div>
+      <!-- Job Lookup Card -->
+      <div class="card" id="job-lookup-card">
+        <h2>Job Lookup</h2>
+        <p class="text-sm text-gray-500">
+          Enter a Job ID to check its status (useful after relogin).
+        </p>
+        <div class="form-group">
+          <label for="lookup-job-id">Job ID</label>
+          <input type="text" id="lookup-job-id" placeholder="e.g., 550e8400-e29b-41d4-a716-446655440000" required>
+        </div>
+        <button type="button" id="lookup-btn" class="btn btn-primary w-full">Lookup Job</button>
+        <div class="lookup-result" id="lookup-result"></div>
+      </div>
 
-      <div class="error" id="job-error"></div>
+      <!-- Job Progress Card -->
+      <div class="card job-status" id="job-status">
+        <h2>Job Progress</h2>
+        <div class="status-text" id="status-text">Initializing…</div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+        <div class="status-text" id="detail-text">Waiting for worker…</div>
+        <div class="download-links" id="download-links"></div>
+        <div class="error" id="job-error"></div>
+      </div>
     </div>
   </div>
 
   <script>
     const API_BASE = '/api/v1';
+    let authToken = localStorage.getItem('authToken');
     let currentJobId = null;
     let pollInterval = null;
 
-    // Load themes on page load
+    // DOM helpers
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+    // UI state
+    function showAuth() {
+      $('#auth-card').style.display = 'block';
+      $('#main-app').style.display = 'none';
+      $('#user-bar').style.display = 'none';
+    }
+    function showApp() {
+      $('#auth-card').style.display = 'none';
+      $('#main-app').style.display = 'block';
+      $('#user-bar').style.display = 'flex';
+    }
+    function updateUserInfo(user) {
+      $('#user-email').textContent = user.email || '';
+      $('#user-status').textContent = user.is_active ? 'Active' : 'Inactive';
+      const initials = (user.email?.match(/\b(\w)/g) || []).slice(0,2).join('').toUpperCase() || '?';
+      $('#user-avatar').textContent = initials;
+    }
+
+    // Auth handling
+    async function login(email, password) {
+      const res = await fetch(`${API_BASE}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.message || 'Login failed');
+      return data;
+    }
+    async function register(email, password) {
+      const res = await fetch(`${API_BASE}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.message || 'Register failed');
+      return data;
+    }
+    async function fetchUser() {
+      const res = await fetch(`${API_BASE}/auth/me`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (!res.ok) throw new Error('Failed to fetch user');
+      return res.json();
+    }
+    function logout() {
+      localStorage.removeItem('authToken');
+      authToken = null;
+      showAuth();
+    }
+
+    // Theme loading
     async function loadThemes() {
       try {
-        const res = await fetch(`${API_BASE}/themes`);
+        const res = await fetch(`${API_BASE}/themes`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('Failed to load themes');
         const data = await res.json();
-        const select = document.getElementById('theme');
+        const select = $('#theme');
         select.innerHTML = '<option value="">Select a theme (random if empty)</option>';
         data.themes.forEach(t => {
           const opt = document.createElement('option');
@@ -197,69 +463,54 @@
           select.appendChild(opt);
         });
       } catch (e) {
-        console.error('Failed to load themes:', e);
+        console.error('Theme load error:', e);
+        $('#theme').innerHTML = '<option value="">Error loading themes</option>';
       }
     }
 
-    // Submit form
-    document.getElementById('book-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('submit-btn');
-      const errorDiv = document.getElementById('error');
-
-      const payload = {
-        theme: document.getElementById('theme').value || null,
-        pages: parseInt(document.getElementById('pages').value),
-        author: document.getElementById('author').value || null,
-        seed: document.getElementById('seed').value ? parseInt(document.getElementById('seed').value) : null,
-        dry_run: document.getElementById('dry_run').checked,
-        auto_approve: document.getElementById('auto_approve').checked,
-        max_regen: 0,
-        require_user_review: !document.getElementById('auto_approve').checked,
-      };
-
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Submitting...';
-      errorDiv.classList.remove('visible');
-
+    // Book creation
+    async function createBook(payload) {
+      const res = await fetch(`${API_BASE}/books`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.message || 'Failed to create job');
+      return data;
+    }
+    async function getJob(jobId) {
+      const res = await fetch(`${API_BASE}/books/${jobId}`, {
+        headers: { 'Authorization': `Bearer ${authToken}` }
+      });
+      if (!res.ok) throw new Error('Job not found or access denied');
+      return res.json();
+    }
+    async function loadDownloads(jobId) {
+      const linksDiv = $('#download-links');
       try {
-        const res = await fetch(`${API_BASE}/books`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-        const data = await res.json();
-
-        if (!res.ok) throw new Error(data.detail || 'Failed to create job');
-
-        currentJobId = data.job_id;
-        document.getElementById('job-status').classList.add('active');
-        document.getElementById('book-form').style.display = 'none';
-        startPolling();
+        linksDiv.innerHTML = `
+          <a href="${API_BASE}/books/${jobId}/download/interior" download class="btn btn-secondary">Download Interior PDF</a>
+          <a href="${API_BASE}/books/${jobId}/download/cover" class="btn btn-secondary">Download Cover PDF</a>
+        `;
       } catch (e) {
-        errorDiv.textContent = e.message;
-        errorDiv.classList.add('visible');
-        btn.disabled = false;
-        btn.innerHTML = '<span class="btn-text">Generate Book</span>';
+        linksDiv.innerHTML = '<p class="text-gray-500">Download links unavailable</p>';
       }
-    });
-
-    // Poll job status
+    }
     function startPolling() {
+      if (pollInterval) clearInterval(pollInterval);
       pollInterval = setInterval(async () => {
         if (!currentJobId) return;
-
         try {
-          const res = await fetch(`${API_BASE}/books/${currentJobId}`);
-          if (!res.ok) throw new Error('Job not found');
-          const data = await res.json();
-
-          updateUI(data);
-
-          if (data.status === 'completed' || data.status === 'failed') {
+          const job = await getJob(currentJobId);
+          updateJobUI(job);
+          if (job.status === 'completed' || job.status === 'failed') {
             clearInterval(pollInterval);
-            if (data.status === 'completed') {
-              await loadDownloads();
+            if (job.status === 'completed') {
+              await loadDownloads(currentJobId);
             }
           }
         } catch (e) {
@@ -267,89 +518,88 @@
         }
       }, 2000);
     }
-
-    function updateUI(data) {
+    function updateJobUI(data) {
       const statusMap = {
-        'queued': { text: 'Queued', pct: 0 },
-        'running': { text: 'Generating pages...', pct: 30 },
-        'awaiting_review': { text: 'Awaiting review', pct: 90 },
-        'completed': { text: 'Complete!', pct: 100 },
-        'failed': { text: 'Failed', pct: 100 },
-        'paused': { text: 'Paused (quota)', pct: 50 },
+        queued: { text: 'Queued', pct: 0, badge: '' },
+        running: { text: 'Generating pages…', pct: 30, badge: '' },
+        awaiting_review: { text: 'Awaiting review', pct: 90, badge: '' },
+        completed: { text: 'Complete!', pct: 100, badge: 'status-badge valid' },
+        failed: { text: 'Failed', pct: 100, badge: 'status-badge error' },
+        paused: { text: 'Paused (quota)', pct: 50, badge: 'status-badge paused' }
       };
-
-      const s = statusMap[data.status] || { text: data.status, pct: 0 };
-      document.getElementById('progress-fill').style.width = `${s.pct}%`;
-      document.getElementById('status-text').textContent = s.text;
-
+      const s = statusMap[data.status] || { text: data.status, pct: 0, badge: '' };
+      $('#status-text').textContent = s.text;
+      $('#progress-fill').style.width = `${s.pct}%`;
       if (data.metadata) {
-        document.getElementById('detail-text').textContent =
-          `${data.metadata.pages} pages • ${data.metadata.theme_display} • ${data.metadata.title}`;
+        $('#detail-text').textContent =
+          `${data.metadata.pages} pages • ${data.metadata.theme_display || data.metadata.theme} • ${data.metadata.title || ''}`;
+      } else {
+        $('#detail-text').textContent = '';
       }
+      $('#job-status').classList.add('active');
     }
-
-    async function loadDownloads() {
-      const linksDiv = document.getElementById('download-links');
-      try {
-        linksDiv.innerHTML = `
-          <a href="${API_BASE}/books/${currentJobId}/download/interior" download>Download Interior PDF</a>
-          <a href="${API_BASE}/books/${currentJobId}/download/cover" class="secondary" download>Download Cover PDF</a>
-        `;
-      } catch (e) {
-        linksDiv.innerHTML = '<p style="color:#666">Download links unavailable</p>';
-      }
-    }
-
-    // Reset to create another book
-    function resetForm() {
-      document.getElementById('job-status').classList.remove('active');
-      document.getElementById('book-form').style.display = 'block';
-      document.getElementById('submit-btn').disabled = false;
-      document.getElementById('submit-btn').innerHTML = '<span class="btn-text">Generate Book</span>';
+    function resetJobUI() {
+      $('#job-status').style.display = 'none';
       currentJobId = null;
-      clearInterval(pollInterval);
+      if (pollInterval) clearInterval(pollInterval);
+      $('#book-form').reset();
+      $('#submit-text').textContent = 'Generate Book';
+      $('#submit-btn').disabled = false;
     }
 
-    // Add "Create Another" button after completion
-    setInterval(() => {
-      const jobStatus = document.getElementById('job-status');
-      if (jobStatus.classList.contains('active')) {
-        const existingBtn = document.getElementById('reset-btn');
-        if (!existingBtn && document.getElementById('status-text').textContent === 'Complete!') {
-          const btn = document.createElement('button');
-          btn.id = 'reset-btn';
-          btn.className = 'btn btn-secondary';
-          btn.style.marginTop = '16px';
-          btn.textContent = 'Create Another Book';
-          btn.onclick = resetForm;
-          document.getElementById('download-links').after(btn);
+    // Job Lookup
+    async function lookupJob(jobId) {
+      const resultDiv = $('#lookup-result');
+      resultDiv.classList.remove('success', 'error');
+      resultDiv.classList.add('loading');
+      resultDiv.textContent = 'Looking up…';
+      try {
+        const job = await getJob(jobId);
+        // Format result
+        const statusMap = {
+          queued: 'Queued',
+          running: 'Running',
+          awaiting_review: 'Awaiting Review',
+          completed: 'Completed',
+          failed: 'Failed',
+          paused: 'Paused (quota)'
+        };
+        const statusText = statusMap[job.status] || job.status;
+        let details = `Status: ${statusText}`;
+        if (job.message) details += ` – ${job.message}`;
+        if (job.metadata) {
+          details += ` | Pages: ${job.metadata.pages} | Theme: ${job.metadata.theme_display || job.metadata.theme}`;
+          if (job.metadata.title) details += ` | Title: ${job.metadata.title}`;
         }
+        if (job.error) details += ` | Error: ${job.error}`;
+        resultDiv.textContent = details;
+        resultDiv.classList.add('success');
+      } catch (err) {
+        resultDiv.textContent = `Error: ${err.message}`;
+        resultDiv.classList.add('error');
       }
-    }, 1000);
+    }
 
-    loadThemes();
-    loadCredentials();
-
-    // Credentials management
+    // Cloudflare credentials
     async function loadCredentials() {
       try {
-        const res = await fetch(`${API_BASE}/credentials`);
+        const res = await fetch(`${API_BASE}/credentials`, {
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
+        if (!res.ok) throw new Error('Failed to load credentials');
         const data = await res.json();
         renderCredentials(data);
       } catch (e) {
-        console.error('Failed to load credentials:', e);
-        document.getElementById('credentials-list').innerHTML =
-          '<div class="creds-empty">Failed to load credentials</div>';
+        console.error('Credentials load error:', e);
+        $('#credentials-list').innerHTML = '<div class="creds-empty">Failed to load credentials</div>';
       }
     }
-
     function renderCredentials(data) {
-      const container = document.getElementById('credentials-list');
+      const container = $('#credentials-list');
       if (data.total === 0) {
         container.innerHTML = '<div class="creds-empty">No credentials configured. Add your first account below.</div>';
         return;
       }
-
       let html = '';
       data.accounts.forEach(acc => {
         const statusClass = acc.valid ? 'valid' : (acc.status === 'error' ? 'error' : 'untested');
@@ -358,30 +608,29 @@
           <div class="slot-row">
             <div class="slot-info">
               <div class="slot-label">Slot ${acc.slot}</div>
-              <div class="slot-acct">${acc.account_id}</div>
+              <div class="slot-value" style="font-family:monospace;">${acc.account_id}</div>
             </div>
-            <div style="display: flex; align-items: center; gap: 12px;">
+            <div class="slot-actions">
               <span class="status-badge ${statusClass}">${statusText}</span>
-              <div class="slot-actions">
-                <button class="btn-small btn-test" onclick="testCredentialSlot(${acc.slot})" ${!acc.valid ? 'disabled' : ''}>Test</button>
-                <button class="btn-small btn-delete" onclick="deleteCredentialSlot(${acc.slot})">Remove</button>
-              </div>
+              <button class="btn btn-test" onclick="testCredentialSlot(${acc.slot})" ${!acc.valid ? 'disabled' : ''}>Test</button>
+              <button class="btn btn-delete" onclick="deleteCredentialSlot(${acc.slot})">Remove</button>
             </div>
           </div>
         `;
       });
       container.innerHTML = html;
     }
-
     async function testCredentialSlot(slot) {
-      // Could implement re-test if needed
+      // placeholder – could re-test via API
       console.log('Test slot', slot);
     }
-
     async function deleteCredentialSlot(slot) {
-      if (!confirm(`Remove credentials from Slot ${slot}?`)) return;
+      if (!window.confirm(`Remove credentials from Slot ${slot}?`)) return;
       try {
-        const res = await fetch(`${API_BASE}/credentials/${slot}`, { method: 'DELETE' });
+        const res = await fetch(`${API_BASE}/credentials/${slot}`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${authToken}` }
+        });
         if (!res.ok) {
           const data = await res.json();
           throw new Error(data.detail || 'Failed to delete');
@@ -391,55 +640,193 @@
         alert('Failed to delete: ' + e.message);
       }
     }
+    async function saveCredential(accountId, apiToken) {
+      const res = await fetch(`${API_BASE}/credentials`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authToken}`
+        },
+        body: JSON.stringify({ account_id: accountId, api_token: apiToken })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || data.message || 'Failed to save credential');
+      return data;
+    }
 
-    // Credentials form submit
-    document.getElementById('credentials-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const btn = document.getElementById('test-cred-btn');
-      const errorDiv = document.getElementById('cred-error');
-      const successDiv = document.getElementById('cred-success');
-
-      const account_id = document.getElementById('new_account_id').value.trim();
-      const api_token = document.getElementById('new_api_token').value.trim();
-
-      if (!account_id || !api_token) {
-        errorDiv.textContent = 'Both Account ID and API Token are required';
-        errorDiv.classList.add('visible');
-        successDiv.classList.remove('visible');
-        return;
+    // Event listeners
+    document.addEventListener('DOMContentLoaded', () => {
+      if (authToken) {
+        // try to fetch user; if fails, clear token and show login
+        fetchUser()
+          .then(user => {
+            updateUserInfo(user);
+            showApp();
+            loadThemes();
+            loadCredentials();
+          })
+          .catch(err => {
+            console.warn('Auth failed, clearing token:', err);
+            localStorage.removeItem('authToken');
+            authToken = null;
+            showAuth();
+          });
+      } else {
+        showAuth();
       }
 
-      btn.disabled = true;
-      btn.textContent = 'Testing & Saving...';
-      errorDiv.classList.remove('visible');
-      successDiv.classList.remove('visible');
-
-      try {
-        const res = await fetch(`${API_BASE}/credentials`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ account_id, api_token })
+      // Auth form toggle
+      $('#show-register').addEventListener('click', e => {
+        e.preventDefault();
+        $('#login-btn').style.display = 'none';
+        $('#register-btn').style.display = 'block';
+        $('#auth-switch').innerHTML = 'Already have an account? <span id="show-login" class="text-primary cursor-pointer">Login</span>';
+        $('#show-login').addEventListener('click', e2 => {
+          e2.preventDefault();
+          $('#login-btn').style.display = 'block';
+          $('#register-btn').style.display = 'none';
+          $('#auth-switch').innerHTML = 'Don\'t have an account? <span id="show-register" class="text-primary cursor-pointer">Register</span>';
+          $('#show-register').addEventListener('click', e3 => {
+            e3.preventDefault();
+            $('#login-btn').style.display = 'none';
+            $('#register-btn').style.display = 'block';
+            $('#auth-switch').innerHTML = 'Already have an account? <span id="show-login" class="text-primary cursor-pointer">Login</span>';
+            $('#show-login').addEventListener('click', e4 => {
+              e4.preventDefault();
+              $('#login-btn').style.display = 'block';
+              $('#register-btn').style.display = 'none';
+              $('#auth-switch').innerHTML = 'Don\'t have an account? <span id="show-register" class="text-primary cursor-pointer">Register</span>';
+              // re-attach
+              $('#show-register').addEventListener('click', e5 => { e5.preventDefault(); /* toggle again */ });
+            });
+          });
         });
-        const data = await res.json();
+      });
 
-        if (!res.ok) throw new Error(data.detail || 'Failed to save');
-
-        successDiv.textContent = data.message + (data.is_duplicate ? ' (duplicate detected)' : '');
-        successDiv.classList.add('visible');
-
-        if (!data.is_duplicate) {
-          document.getElementById('new_account_id').value = '';
-          document.getElementById('new_api_token').value = '';
+      // Login / Register submit
+      $('#auth-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const email = $('#auth-email').value.trim();
+        const password = $('#auth-password').value;
+        const isLogin = $('#login-btn').style.display !== 'none';
+        const btn = isLogin ? $('#login-btn') : $('#register-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> ' + (isLogin ? 'Logging in…' : 'Registering…');
+        $('#auth-error').classList.remove('visible');
+        try {
+          if (isLogin) {
+            const data = await login(email, password);
+            authToken = data.access_token;
+            localStorage.setItem('authToken', authToken);
+            const user = await fetchUser();
+            updateUserInfo(user);
+            showApp();
+            loadThemes();
+            loadCredentials();
+          } else {
+            const data = await register(email, password);
+            authToken = data.access_token;
+            localStorage.setItem('authToken', authToken);
+            const user = await fetchUser();
+            updateUserInfo(user);
+            showApp();
+            loadThemes();
+            loadCredentials();
+          }
+        } catch (err) {
+          $('#auth-error').textContent = err.message;
+          $('#auth-error').classList.add('visible');
+        } finally {
+          btn.disabled = false;
+          btn.innerHTML = isLogin ? 'Login' : 'Register';
         }
+      });
 
-        await loadCredentials();
-      } catch (e) {
-        errorDiv.textContent = e.message;
-        errorDiv.classList.add('visible');
-      } finally {
-        btn.disabled = false;
-        btn.textContent = 'Test & Save';
-      }
+      // Logout
+      $('#logout-btn').addEventListener('click', logout);
+
+      // Book form
+      $('#book-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = $('#submit-btn');
+        const txt = $('#submit-text');
+        btn.disabled = true;
+        txt.textContent = 'Submitting…';
+        btn.innerHTML = '<span class="spinner"></span> Submitting…';
+        $('#book-error').classList.remove('visible');
+        try {
+          const payload = {
+            theme: $('#theme').value || null,
+            pages: parseInt($('#pages').value, 10),
+            author: $('#author').value.trim() || null,
+            seed: $('#seed').value ? parseInt($('#seed').value, 10) : null,
+            dry_run: $('#dry_run').checked,
+            auto_approve: $('#auto_approve').checked,
+            require_user_review: !$('#auto_approve').checked,
+            max_regen: 0
+          };
+          const data = await createBook(payload);
+          currentJobId = data.job_id;
+          $('#job-status').style.display = 'block';
+          startPolling();
+        } catch (err) {
+          $('#book-error').textContent = err.message;
+          $('#book-error').classList.add('visible');
+        } finally {
+          btn.disabled = false;
+          txt.textContent = 'Generate Book';
+          btn.innerHTML = '<span class="btn-text">Generate Book</span>';
+        }
+      });
+
+      // Credentials form
+      $('#credentials-form').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = $('#test-cred-btn');
+        const successDiv = $('#cred-success');
+        const errorDiv = $('#cred-error');
+        btn.disabled = true;
+        btn.textContent = 'Testing & Saving…';
+        successDiv.classList.remove('visible');
+        errorDiv.classList.remove('visible');
+        try {
+          const accountId = $('#new_account_id').value.trim();
+          const apiToken = $('#new_api_token').value.trim();
+          if (!accountId || !apiToken) throw new Error('Both Account ID and API Token are required');
+          const data = await saveCredential(accountId, apiToken);
+          successDiv.textContent = data.message + (data.is_duplicate ? ' (duplicate detected)' : '');
+          successDiv.classList.add('visible');
+          if (!data.is_duplicate) {
+            $('#new_account_id').value = '';
+            $('#new_api_token').value = '';
+          }
+          await loadCredentials();
+        } catch (err) {
+          errorDiv.textContent = err.message;
+          errorDiv.classList.add('visible');
+        } finally {
+          btn.disabled = false;
+          btn.textContent = 'Test & Save';
+        }
+      });
+
+      // Job Lookup form
+      $('#lookup-btn').addEventListener('click', async () => {
+        const jobId = $('#lookup-job-id').value.trim();
+        if (!jobId) {
+          $('#lookup-result').textContent = 'Please enter a Job ID';
+          $('#lookup-result').classList.add('error');
+          return;
+        }
+        await lookupJob(jobId);
+      });
+      // Allow Enter key in lookup field
+      $('#lookup-job-id').addEventListener('keypress', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          $('#lookup-btn').click();
+        }
+      });
     });
   </script>
 </body>

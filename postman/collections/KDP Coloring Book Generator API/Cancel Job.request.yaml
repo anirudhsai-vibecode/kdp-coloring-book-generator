@@ -1,4 +1,0 @@
-$kind: http-request
-url: "{{baseUrl}}/api/v1/books/{{jobId}}"
-method: DELETE
-order: 10000

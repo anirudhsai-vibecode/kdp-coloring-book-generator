@@ -9,6 +9,10 @@ Generate **print-ready Amazon KDP** coloring books for ages **3–7**:
 - Cloudflare Workers AI (FLUX.1-schnell) generation
 - FastAPI web service with async job queue (Redis/RQ)
 - Hard-FAIL QA gates (print-ready compliance)
+- **User authentication** (login / register) with JWT tokens
+- Job ownership – users only see their own jobs
+- Cloudflare quota handling – jobs pause on 4006 errors and resume when quota refills
+- **Job lookup** – check any job status by ID (useful after relogin)
 
 **No trademarked characters** — original cute subjects only.
 
@@ -31,7 +35,7 @@ python main.py --pages 25 --auto-approve
 #### Prerequisites
 - **Docker Desktop** (for Redis)
 - **Python 3.13+**
-- Cloudflare credentials (for live generation) — **now manageable from the UI**
+- Cloudflare credentials (for live generation) – manageable from the UI
 
 #### 1. Start Redis
 ```bash
@@ -69,6 +73,9 @@ CLOUDFLARE_API_TOKEN_3=...
 
 # Author name (default: "Your Name Here")
 AUTHOR=Your Name
+
+# JWT secret (required for auth)
+JWT_SECRET_KEY=your-super-secret-key-change-in-production
 ```
 
 #### 4. Start API Server
@@ -86,70 +93,57 @@ python worker.py
 
 #### 6. Generate a Book
 Open http://localhost:8000 in your browser:
-1. **Cloudflare Credentials** card (top) — add your Account ID + API Token (tested live before saving to `.env`)
-2. Select theme, pages, author
-3. Check "Dry run" for offline testing
-4. Click "Generate Book"
-5. Watch real-time progress
-6. Download Interior/Cover PDFs when complete
+1. **Login / Register** – create an account or log in.
+2. After login, the **Create New Book** form appears.
+3. **Cloudflare Credentials** card (top) – add your Account ID + API Token (tested live before saving to `.env`)
+4. Select theme, pages, author
+5. Check "Dry run" for offline testing
+6. Click "Generate Book"
+7. Watch real-time progress
+8. Download Interior/Cover PDFs when complete
+
+#### 7. Lookup a Job (after relogin)
+If you get logged out (network issue, session expiry, etc.) and want to check the status of a previously started job:
+1. Log back in
+2. Scroll to the **Job Lookup** section (below the Cloudflare Credentials card)
+3. Enter the Job ID you received when you originally created the job
+4. Click **Lookup Job** – the current status (Queued, Running, Awaiting Review, Completed, Failed, Paused) will be displayed
+5. If the job completed, download links will appear in the main Job Progress card
 
 ---
 
-## Architecture (Approach B)
+## Authentication
 
-```
-┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│   Browser   │────▶│  FastAPI    │────▶│   Redis     │
-│  (Frontend) │     │   (API)     │     │  (Queue)    │
-└─────────────┘     └─────────────┘     └──────┬──────┘
-                                               │
-                    ┌──────────────────────────┘
-                    ▼
-              ┌─────────────┐
-              │   Worker    │
-              │  (RQ)       │
-              └──────┬──────┘
-                     │
-        ┌────────────┼────────────┐
-        ▼            ▼            ▼
-   ┌────────┐  ┌───────────┐ ┌────────┐
-   │ Cloud- │  │  QA Gates │ │  PDF   │
-   │ flare  │  │           │ │ Builder│
-   └────────┘  └───────────┘ └────────┘
-```
+The web service now requires a JWT token for all job‑related endpoints.
 
-- **API Layer**: FastAPI handles requests, enqueues jobs to Redis/RQ.
-- **Worker Layer**: RQ workers process jobs — Cloudflare rotation, QA gates, PDF assembly.
-- **Pipeline**: `kdp_coloring.pipeline.generate_book()` — pure function, reusable.
-- **Deployment**: Fly.io ready (Dockerfile, fly.toml included).
+- **Register**: `POST /api/v1/auth/register` with `{email, password}`
+- **Login**: `POST /api/v1/auth/login` with `{email, password}` → returns `{access_token, token_type}`
+- **Me**: `GET /api/v1/auth/me` (Bearer token) → returns user info
+- **Logout**: remove the token from client storage (no server‑side state)
+
+In the web UI, after login the token is stored in `localStorage` and automatically attached to every API request.  
+If you prefer to use curl or Postman, copy the `access_token` from the login response and add the header:
+
+```bash
+curl -H "Authorization: Bearer <access_token>" \
+     -X POST http://localhost:8000/api/v1/books \
+     -H "Content-Type: application/json" \
+     -d '{"theme":"cute","pages":25,"author":"Alice"}'
+
+# Lookup a job via API:
+curl -H "Authorization: Bearer <access_token>" \
+     http://localhost:8000/api/v1/books/<job_id>
+```
 
 ---
 
-## CLI Options
+## Job Lookup Endpoint
 
-| Flag | Description |
-|------|-------------|
-| `--pages N` | Coloring page count (default: 50) |
-| `--theme NAME` | Theme key/name; omit for random |
-| `--seed N` | Reproducible RNG seed |
-| `--author "..."` | Cover author name |
-| `--dry-run` | Placeholder images (no network/API) |
-| `--list-themes` | Show available themes |
-| `--max-regen N` | Max FAIL retries per page (0 = unlimited) |
-| `--auto-approve` | Skip user-review gate |
-| `--skip-exit-gate` | Skip image QA (not for production) |
+**POST** `/api/v1/auth/lookup` – Lookup a job by ID (requires authentication)
 
-Output layout:
-```
-output/<slug>-<timestamp>/
-  images/page_001.png …
-  images/raw/page_001.png …
-  failed_dump/page-01-attempt-1.png …
-  failed_dump/manifest.json
-  interior.pdf
-  cover.pdf
-  metadata.json
-```
+This endpoint allows users to find any job by its ID, but only if they are authenticated. The job ownership check ensures users can only see jobs they created.
+
+**Response** – Returns the same data as `/api/v1/books/{job_id}`.
 
 ---
 
@@ -158,17 +152,21 @@ output/<slug>-<timestamp>/
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/v1/themes` | List all themes |
-| `POST` | `/api/v1/books` | Enqueue job (returns `job_id`) |
-| `GET` | `/api/v1/books/{job_id}` | Job status + metadata |
-| `GET` | `/api/v1/books/{job_id}/progress` | Real-time progress (SSE-ready) |
-| `GET` | `/api/v1/books/{job_id}/download/interior` | Download interior PDF |
-| `GET` | `/api/v1/books/{job_id}/download/cover` | Download cover PDF |
-| `POST` | `/api/v1/books/{job_id}/approve` | Approve awaiting-review job |
+| `POST` | `/api/v1/books` | Enqueue job (returns `job_id`) – **requires auth** |
+| `GET` | `/api/v1/books/{job_id}` | Job status + metadata – **requires auth + ownership** |
+| `GET` | `/api/v1/books/{job_id}/progress` | Real-time progress (SSE-ready) – **requires auth** |
+| `GET` | `/api/v1/books/{job_id}/download/interior` | Download interior PDF – **requires auth + ownership** |
+| `GET` | `/api/v1/books/{job_id}/download/cover` | Download cover PDF – **requires auth + ownership** |
+| `POST` | `/api/v1/books/{job_id}/approve` | Approve awaiting-review job – **requires auth + ownership** |
 | `POST` | `/api/v1/credentials/test` | Test Cloudflare credentials (no save) |
 | `POST` | `/api/v1/credentials` | Save validated credentials to `.env` |
 | `GET` | `/api/v1/credentials` | List configured accounts with status |
 | `DELETE` | `/api/v1/credentials/{slot}` | Remove credentials from slot (1–3) |
 | `POST` | `/api/v1/credentials/reload` | Force reload from `.env` |
+| `POST` | `/api/v1/auth/register` | User registration |
+| `POST` | `/api/v1/auth/login` | Login – returns JWT access token |
+| `GET`  | `/api/v1/auth/me` | Get current user info (Bearer token) |
+| `POST` | `/api/v1/auth/logout` | Logout (client‑side token removal) |
 
 ---
 
@@ -177,7 +175,7 @@ output/<slug>-<timestamp>/
 | File | Purpose |
 |------|---------|
 | `config.yaml` | Page size, margins, bleed, spine factors, AI thresholds |
-| `.env` | Cloudflare credentials, author name (managed via UI or CLI) |
+| `.env` | Cloudflare credentials, author name, JWT secret (managed via UI or CLI) |
 | `app/core/config.py` | Web service settings (Redis URL, queue name, etc.) |
 | `src/kdp_coloring/themes.yaml` | Theme definitions, subject pools |
 | `qa_checks/THRESHOLDS.md` | QA gate thresholds |
@@ -199,6 +197,8 @@ All modules use Python `logging` with a consistent format:
   - PDF assembly (interior/cover)
   - Cloudflare account rotation on quota exhaustion
   - QA gate passes/failures
+  - Authentication events (login, register, token validation)
+  - Job lookup requests
 
 ---
 
@@ -241,12 +241,17 @@ kdp-coloring-book-generator/
 ├── fly.toml                   # Fly.io deployment config
 ├── app/
 │   ├── main.py               # FastAPI app + frontend
-│   ├── templates/index.html  # Web UI
-│   ├── api/routes.py         # REST endpoints
+│   ├── templates/index.html  # Web UI (now with Job Lookup card)
+│   ├── api/routes.py         # REST endpoints (job + auth + lookup)
+│   ├── api/auth.py           # Auth endpoints
+│   ├── middleware/auth.py    # JWT auth middleware
+│   ├── core/token_utils.py   # JWT create/verify helpers
 │   ├── workers/tasks.py      # RQ job handlers
 │   ├── core/config.py        # Settings
 │   ├── core/queue.py         # Redis/RQ helpers
-│   └── models/schemas.py     # Pydantic models
+│   └── models/
+│       ├── user.py           # User model + helpers
+│       └── schemas.py        # Pydantic models (jobs, themes, etc.)
 ├── src/kdp_coloring/
 │   ├── pipeline.py           # Core generate_book()
 │   ├── config.py             # Config loader

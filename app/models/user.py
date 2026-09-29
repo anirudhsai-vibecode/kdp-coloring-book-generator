@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import Any
+from typing import Dict, List
 
 import bcrypt
 from pydantic import BaseModel
@@ -19,8 +19,8 @@ class User(BaseModel):
     is_active: bool = True
 
     @classmethod
-    def create(cls, email: str, password: str) -> User:
-        """Create a new user with hashed password."""
+    def create(cls, email: str, password: str) -> "User":
+        """Create a new user with a hashed password."""
         hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
         return cls(email=email, password_hash=hashed)
 
@@ -40,9 +40,11 @@ class UserPublic(BaseModel):
     created_at: datetime
 
     @classmethod
-    def from_user(cls, user: User) -> UserPublic:
+    def from_user(cls, user: User) -> "UserPublic":
         return cls(id=user.id, email=user.email, created_at=user.created_at)
 
+
+# ----- Redis key helpers -----
 
 def user_key(user_id: str) -> str:
     """Redis key for a user."""
@@ -54,15 +56,27 @@ def user_jobs_key(user_id: str) -> str:
     return f"user_jobs:{user_id}"
 
 
+# ----- Persistence helpers -----
+
+def _decode_redis_hash(data: Dict[bytes, bytes]) -> Dict[str, str]:
+    """Decode a redis.hgetall result into a str: str dict."""
+    return {
+        k.decode() if isinstance(k, (bytes, bytearray)) else k: v.decode() if isinstance(v, (bytes, bytearray)) else v
+        for k, v in data.items()
+    }
+
+
 def save_user(user: User) -> bool:
     """Save user to Redis."""
     from app.core.queue import get_redis_connection
     redis = get_redis_connection()
     user_dict = user.model_dump()
-    # Convert datetime to ISO string for Redis
     user_dict["created_at"] = user_dict["created_at"].isoformat()
+    user_dict["is_active"] = int(user_dict["is_active"])
     return bool(redis.hset(user_key(user.id), mapping=user_dict))
 
+
+# ---- Retrieval helpers -----
 
 def get_user(user_id: str) -> User | None:
     """Retrieve user from Redis."""
@@ -71,43 +85,53 @@ def get_user(user_id: str) -> User | None:
     data = redis.hgetall(user_key(user_id))
     if not data:
         return None
-    # Convert ISO string back to datetime
-    data["created_at"] = datetime.fromisoformat(data["created_at"])
-    return User(**data)
+    decoded = _decode_redis_hash(data)
+    decoded["created_at"] = datetime.fromisoformat(decoded["created_at"])
+    if "is_active" in decoded:
+        decoded["is_active"] = bool(int(decoded["is_active"]))
+    return User(**decoded)
 
+
+# ---- Email lookup -----
 
 def get_user_by_email(email: str) -> User | None:
     """Find user by email (linear scan through users)."""
     from app.core.queue import get_redis_connection
     redis = get_redis_connection()
-    # Scan all user keys
-    cursor = "0"
-    while cursor != 0:
-        cursor, keys = redis.scan(cursor, match="user:*")
+    cursor = 0
+    while True:
+        cursor, keys = redis.scan(cursor=cursor, match="user:*")
         for key in keys:
-            data = redis.hgetall(key)
-            if data.get("email") == email:
-                data["created_at"] = datetime.fromisoformat(data["created_at"])
-                return User(**data)
+            raw = redis.hgetall(key)
+            decoded = _decode_redis_hash(raw)
+            if decoded.get("email") == email:
+                decoded["created_at"] = datetime.fromisoformat(decoded["created_at"])
+                if "is_active" in decoded:
+                    decoded["is_active"] = bool(int(decoded["is_active"]))
+                return User(**decoded)
+        if cursor == 0:
+            break
     return None
 
 
+# ---- Job set helpers -----
+
 def add_job_to_user(user_id: str, job_id: str) -> bool:
-    """Add job ID to user's job set."""
+    """Add a job ID to a user's job set."""
     from app.core.queue import get_redis_connection
     redis = get_redis_connection()
     return bool(redis.sadd(user_jobs_key(user_id), job_id))
 
 
 def remove_job_from_user(user_id: str, job_id: str) -> bool:
-    """Remove job ID from user's job set."""
+    """Remove a job ID from a user's job set."""
     from app.core.queue import get_redis_connection
     redis = get_redis_connection()
     return bool(redis.srem(user_jobs_key(user_id), job_id))
 
 
-def get_user_jobs(user_id: str) -> list[str]:
+def get_user_jobs(user_id: str) -> List[str]:
     """Get all job IDs for a user."""
     from app.core.queue import get_redis_connection
     redis = get_redis_connection()
-    return list(redis.smembers(user_jobs_key(user_id)))
+    return [jid.decode() if isinstance(jid, (bytes, bytearray)) else jid for jid in redis.smembers(user_jobs_key(user_id))]

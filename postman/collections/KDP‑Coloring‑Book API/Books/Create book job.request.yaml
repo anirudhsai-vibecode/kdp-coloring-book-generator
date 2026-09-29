@@ -1,0 +1,20 @@
+$kind: http-request
+url: "{{base_url}}/api/v1/books"
+method: POST
+headers:
+  Content-Type: application/json
+  Authorization: Bearer {{token}}
+body:
+  type: text
+  content: |-
+    {
+      "theme": "animals",
+      "pages": 50,
+      "author": "Jane Doe",
+      "seed": 42,
+      "dry_run": false,
+      "max_regen": 3,
+      "require_user_review": false,
+      "auto_approve": true
+    }
+order: 1000
