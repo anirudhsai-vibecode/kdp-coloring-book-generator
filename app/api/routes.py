@@ -162,8 +162,12 @@ async def get_book_job(job_id: str, user: User = Depends(get_current_user)) -> J
             detail=f"Job {job_id} not found",
         )
 
-    # Check job ownership
-    if job.meta.get("user_id") != user.id:
+    # Check job ownership - user_id can be in job.meta (for running jobs) or job.result.metadata (for completed jobs)
+    job_user_id = job.meta.get("user_id")
+    if not job_user_id and job.result and isinstance(job.result, dict):
+        job_user_id = job.result.get("metadata", {}).get("user_id")
+
+    if job_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: Job does not belong to current user",
@@ -213,8 +217,12 @@ async def get_book_progress(job_id: str, user: User = Depends(get_current_user))
             detail=f"Job {job_id} not found",
         )
 
-    # Check job ownership
-    if job.meta.get("user_id") != user.id:
+    # Check job ownership - user_id can be in job.meta (for running jobs) or job.result.metadata (for completed jobs)
+    job_user_id = job.meta.get("user_id")
+    if not job_user_id and job.result and isinstance(job.result, dict):
+        job_user_id = job.result.get("metadata", {}).get("user_id")
+
+    if job_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: Job does not belong to current user",
@@ -286,8 +294,12 @@ async def download_book_file(job_id: str, file_type: str, user: User = Depends(g
             detail=f"Job {job_id} not found",
         )
 
-    # Check job ownership
-    if job.meta.get("user_id") != user.id:
+    # Check job ownership - user_id can be in job.meta (for running jobs) or job.result.metadata (for completed jobs)
+    job_user_id = job.meta.get("user_id")
+    if not job_user_id and job.result and isinstance(job.result, dict):
+        job_user_id = job.result.get("metadata", {}).get("user_id")
+
+    if job_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: Job does not belong to current user",
@@ -347,8 +359,12 @@ async def approve_book(job_id: str, user: User = Depends(get_current_user)) -> J
             detail=f"Job {job_id} not found",
         )
 
-    # Check job ownership
-    if job.meta.get("user_id") != user.id:
+    # Check job ownership - user_id can be in job.meta (for running jobs) or job.result.metadata (for completed jobs)
+    job_user_id = job.meta.get("user_id")
+    if not job_user_id and job.result and isinstance(job.result, dict):
+        job_user_id = job.result.get("metadata", {}).get("user_id")
+
+    if job_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: Job does not belong to current user",
