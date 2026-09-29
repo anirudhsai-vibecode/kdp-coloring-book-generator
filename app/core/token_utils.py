@@ -2,6 +2,7 @@
 
 from datetime import datetime, timedelta
 from typing import Any
+import os
 
 from jose import jwt
 from pydantic import BaseModel
@@ -12,7 +13,8 @@ class TokenPayload(BaseModel):
     exp: int
 
 
-SECRET_KEY = "your-secret-key-here-change-in-production"
+# Read secret from environment variable with fallback for development
+SECRET_KEY = os.environ.get("JWT_SECRET_KEY", "your-secret-key-here-change-in-production")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
