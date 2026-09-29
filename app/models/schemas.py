@@ -81,3 +81,7 @@ class ThemeInfo(BaseModel):
 
 class ThemesResponse(BaseModel):
     themes: list[ThemeInfo]
+
+
+class JobLookupRequest(BaseModel):
+    job_id: str

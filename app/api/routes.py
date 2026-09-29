@@ -21,6 +21,7 @@ from app.models.user import get_user_jobs
 from app.models.schemas import (
     BookMetadata,
     CreateBookRequest,
+    JobLookupRequest,
     JobProgress,
     JobResponse,
     JobStatus,
@@ -105,24 +106,27 @@ async def create_book(request: CreateBookRequest, background_tasks: BackgroundTa
     )
 
 
-@router.get("/books/{job_id}", response_model=JobResponse)
-
 @router.post("/auth/lookup", response_model=JobResponse)
-async def lookup_job(job_id: str, user: User = Depends(get_current_user)):
+async def lookup_job(request: JobLookupRequest, user: User = Depends(get_current_user)):
     """Lookup a job by ID (requires authentication).
 
     This endpoint allows users to find any job by its ID, but only if they are
     authenticated. The job ownership check ensures users can only see jobs they
     created.
     """
+    job_id = request.job_id
     job = get_job(job_id)
     if not job:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Job {job_id} not found",
         )
-    # Ownership check
-    if job.meta.get("user_id") != user.id:
+    # Ownership check - user_id can be in job.meta (for running jobs) or job.result.metadata (for completed jobs)
+    job_user_id = job.meta.get("user_id")
+    if not job_user_id and job.result and isinstance(job.result, dict):
+        job_user_id = job.result.get("metadata", {}).get("user_id")
+
+    if job_user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: Job does not belong to current user",
@@ -153,6 +157,9 @@ async def lookup_job(job_id: str, user: User = Depends(get_current_user)):
         metadata=metadata,
         error=job.exc_info,
     )
+
+
+@router.get("/books/{job_id}", response_model=JobResponse)
 async def get_book_job(job_id: str, user: User = Depends(get_current_user)) -> JobResponse:
     """Get job status and result."""
     job = get_job(job_id)
