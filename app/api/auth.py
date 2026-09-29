@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer
 
 from app.core.token_utils import create_access_token
+from app.middleware.auth import get_current_user
 from app.models.user import User, UserCreate, UserPublic, save_user, get_user_by_email
 
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
-security = HTTPBearer()
 
 
 @router.post("/register", response_model=UserPublic)
@@ -55,7 +54,7 @@ async def login(user_data: UserCreate):
 
 
 @router.get("/me", response_model=UserPublic)
-async def get_current_user(user: User = Depends(security)):
+async def get_current_user_info(user: User = Depends(get_current_user)):
     """Get current user info."""
     return UserPublic.from_user(user)
 

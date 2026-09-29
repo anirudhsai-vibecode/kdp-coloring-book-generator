@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, JSONResponse
 
 from app.core.config import settings
 from app.core.queue import enqueue_book_generation, get_job, get_job_status, update_job_progress, add_job_to_user
+from app.models.user import get_user_jobs
 from app.models.schemas import (
     BookMetadata,
     CreateBookRequest,

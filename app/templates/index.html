@@ -266,8 +266,8 @@
           <input type="password" id="auth-password" required>
         </div>
         <div class="form-group" id="auth-toggle">
-          <button type="button" id="login-btn" class="btn btn-primary w-full">Login</button>
-          <button type="button" id="register-btn" class="btn btn-secondary w-full mt-2">Register</button>
+          <button type="submit" id="login-btn" class="btn btn-primary w-full">Login</button>
+          <button type="submit" id="register-btn" class="btn btn-secondary w-full mt-2">Register</button>
         </div>
         <div class="error" id="auth-error"></div>
         <p class="text-sm text-gray-500 mt-2" id="auth-switch">
@@ -676,29 +676,25 @@
       }
 
       // Auth form toggle
+      let isLoginMode = true;
       $('#show-register').addEventListener('click', e => {
         e.preventDefault();
+        isLoginMode = false;
         $('#login-btn').style.display = 'none';
         $('#register-btn').style.display = 'block';
         $('#auth-switch').innerHTML = 'Already have an account? <span id="show-login" class="text-primary cursor-pointer">Login</span>';
         $('#show-login').addEventListener('click', e2 => {
           e2.preventDefault();
+          isLoginMode = true;
           $('#login-btn').style.display = 'block';
           $('#register-btn').style.display = 'none';
           $('#auth-switch').innerHTML = 'Don\'t have an account? <span id="show-register" class="text-primary cursor-pointer">Register</span>';
           $('#show-register').addEventListener('click', e3 => {
             e3.preventDefault();
+            isLoginMode = false;
             $('#login-btn').style.display = 'none';
             $('#register-btn').style.display = 'block';
             $('#auth-switch').innerHTML = 'Already have an account? <span id="show-login" class="text-primary cursor-pointer">Login</span>';
-            $('#show-login').addEventListener('click', e4 => {
-              e4.preventDefault();
-              $('#login-btn').style.display = 'block';
-              $('#register-btn').style.display = 'none';
-              $('#auth-switch').innerHTML = 'Don\'t have an account? <span id="show-register" class="text-primary cursor-pointer">Register</span>';
-              // re-attach
-              $('#show-register').addEventListener('click', e5 => { e5.preventDefault(); /* toggle again */ });
-            });
           });
         });
       });
@@ -706,9 +702,10 @@
       // Login / Register submit
       $('#auth-form').addEventListener('submit', async e => {
         e.preventDefault();
+        console.log('Auth form submitted, isLoginMode:', isLoginMode);
         const email = $('#auth-email').value.trim();
         const password = $('#auth-password').value;
-        const isLogin = $('#login-btn').style.display !== 'none';
+        const isLogin = isLoginMode;
         const btn = isLogin ? $('#login-btn') : $('#register-btn');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> ' + (isLogin ? 'Logging in…' : 'Registering…');

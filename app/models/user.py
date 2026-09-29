@@ -21,12 +21,20 @@ class User(BaseModel):
     @classmethod
     def create(cls, email: str, password: str) -> "User":
         """Create a new user with a hashed password."""
-        hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt()).decode("utf-8")
+        # bcrypt has a 72-byte limit for passwords
+        pw_bytes = password.encode("utf-8")
+        if len(pw_bytes) > 72:
+            pw_bytes = pw_bytes[:72]
+        hashed = bcrypt.hashpw(pw_bytes, bcrypt.gensalt()).decode("utf-8")
         return cls(email=email, password_hash=hashed)
 
     def verify_password(self, password: str) -> bool:
         """Verify a password against the stored hash."""
-        return bcrypt.checkpw(password.encode("utf-8"), self.password_hash.encode("utf-8"))
+        # bcrypt has a 72-byte limit for passwords
+        pw_bytes = password.encode("utf-8")
+        if len(pw_bytes) > 72:
+            pw_bytes = pw_bytes[:72]
+        return bcrypt.checkpw(pw_bytes, self.password_hash.encode("utf-8"))
 
 
 class UserCreate(BaseModel):
