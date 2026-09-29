@@ -128,6 +128,9 @@ def generate_book_job(params: dict[str, Any], timeout: int = 3600) -> dict[str, 
             message="Book generation complete, packaging PDFs...",
         )
 
+        # Add user_id to metadata
+        metadata["user_id"] = user_id
+
         # Build result
         result = {
             "job_id": job_id,
