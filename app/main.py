@@ -18,6 +18,7 @@ from fastapi.templating import Jinja2Templates
 
 from app.api.routes import router as api_router
 from app.api.credentials import router as credentials_router
+from app.api.auth import router as auth_router
 from app.core.config import settings, get_output_path
 
 # Configure logging
@@ -69,6 +70,7 @@ def create_app() -> FastAPI:
     )
 
     # Include API routes
+    app.include_router(auth_router)
     app.include_router(api_router)
     app.include_router(credentials_router)
 

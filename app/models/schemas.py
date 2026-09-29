@@ -15,6 +15,7 @@ class JobStatus(str, Enum):
     AWAITING_REVIEW = "awaiting_review"
     COMPLETED = "completed"
     FAILED = "failed"
+    PAUSED_WITH_QUOTA = "paused_with_quota"
 
 
 class CreateBookRequest(BaseModel):
@@ -45,6 +46,9 @@ class BookMetadata(BaseModel):
     cover_size_in: list[float]
     paper: str
     subjects: list[str] = []
+    user_id: Optional[str] = None
+    quota_exceeded_at: Optional[datetime] = None
+    estimated_reset_time: Optional[datetime] = None
 
 
 class JobResponse(BaseModel):

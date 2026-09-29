@@ -67,3 +67,35 @@ def update_job_progress(job_id: str, **progress_data) -> bool:
     job.meta.update(progress_data)
     job.save_meta()
     return True
+
+
+def add_job_to_user(user_id: str, job_id: str) -> bool:
+    """Add job ID to user's job set in Redis."""
+    redis = get_redis_connection()
+    key = f"user_jobs:{user_id}"
+    return bool(redis.sadd(key, job_id))
+
+
+def get_user_jobs(user_id: str) -> list[str]:
+    """Get all job IDs for a user."""
+    redis = get_redis_connection()
+    key = f"user_jobs:{user_id}"
+    return list(redis.smembers(key))
+
+
+def add_paused_job(job_id: str) -> bool:
+    """Add a paused job ID to the paused jobs set."""
+    redis = get_redis_connection()
+    return bool(redis.sadd("paused_jobs", job_id))
+
+
+def remove_paused_job(job_id: str) -> bool:
+    """Remove a paused job ID from the paused jobs set."""
+    redis = get_redis_connection()
+    return bool(redis.srem("paused_jobs", job_id))
+
+
+def get_paused_jobs() -> list[str]:
+    """Get all paused job IDs."""
+    redis = get_redis_connection()
+    return list(redis.smembers("paused_jobs"))

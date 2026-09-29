@@ -1,0 +1,105 @@
+services:
+  # FastAPI web/API service
+  - type: web
+    name: kdp-coloring-book-generator
+    runtime: python
+    plan: free
+    region: singapore
+
+    buildCommand: pip install -r requirements.txt
+
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+
+    healthCheckPath: /health
+
+    # Persistent disk for generated PDFs/images
+    disk:
+      name: kdp-output
+      mountPath: /app/output
+      sizeGB: 10
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13"
+
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: kdp-redis
+          property: connectionString
+
+      # Cloudflare credentials - add in Render Dashboard as secrets
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID_2
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN_2
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID_3
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN_3
+        sync: false
+
+      # Default author (can be overridden via UI)
+      - key: AUTHOR
+        value: "Your Name Here"
+
+  # Background worker (free plan - will spin down after inactivity)
+  - type: worker
+    name: kdp-coloring-book-worker
+    runtime: python
+    plan: free
+    region: singapore
+
+    buildCommand: pip install -r requirements.txt
+
+    startCommand: python worker.py
+
+    # Same persistent disk for output files
+    disk:
+      name: kdp-output
+      mountPath: /app/output
+      sizeGB: 10
+
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13"
+
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: kdp-redis
+          property: connectionString
+
+      # Cloudflare credentials - add in Render Dashboard as secrets
+      - key: CLOUDFLARE_ACCOUNT_ID
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID_2
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN_2
+        sync: false
+      - key: CLOUDFLARE_ACCOUNT_ID_3
+        sync: false
+      - key: CLOUDFLARE_API_TOKEN_3
+        sync: false
+
+      - key: AUTHOR
+        value: "Your Name Here"
+
+  # Redis-compatible queue (Key Value)
+  - type: keyvalue
+    name: kdp-redis
+    plan: free
+    region: singapore
+    maxmemoryPolicy: noeviction
+
+  # PostgreSQL for user authentication data
+  - type: postgres
+    name: kdp-users-db
+    plan: free
+    region: singapore
+    version: 15
