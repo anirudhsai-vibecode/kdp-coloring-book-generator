@@ -50,8 +50,10 @@ def run_worker():
 
 if __name__ == "__main__":
     # Start RQ worker in background thread
+    # Start RQ worker in background thread
     worker_thread = threading.Thread(target=run_worker, daemon=True)
     worker_thread.start()
+    logger.info("RQ worker thread started")
 
     # Run health endpoint on port from environment
     port = int(settings.app_port)
