@@ -30,8 +30,8 @@ def test_generate_book_dry_run(sample_config_yaml, mock_env, temp_dir):
     assert meta["author"] == "Test Author"
     assert meta["theme_key"] == "pets"
     assert meta["pages"] == 5
-    assert "interior" in meta["paths"]
-    assert "cover" in meta["paths"]
+    assert meta["interior_pdf"]
+    assert meta["cover_pdf"]
 
 
 def test_generate_book_different_themes(sample_config_yaml, mock_env, temp_dir):

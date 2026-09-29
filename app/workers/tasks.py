@@ -26,7 +26,7 @@ from kdp_coloring.pipeline import generate_book as pipeline_generate_book
 logger = logging.getLogger(__name__)
 
 
-def generate_book_job(params: dict[str, Any]) -> dict[str, Any]:
+def generate_book_job(params: dict[str, Any], timeout: int = 3600) -> dict[str, Any]:
     """
     RQ job to generate a coloring book.
 

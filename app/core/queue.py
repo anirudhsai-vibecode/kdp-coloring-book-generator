@@ -11,7 +11,8 @@ from app.core.config import settings
 
 def get_redis_connection() -> redis.Redis:
     """Get Redis connection from settings."""
-    return redis.from_url(settings.redis_url, decode_responses=True)
+    # Don't decode responses - RQ uses binary serialization (pickle/msgpack)
+    return redis.from_url(settings.redis_url, decode_responses=False)
 
 
 def get_queue() -> Queue:

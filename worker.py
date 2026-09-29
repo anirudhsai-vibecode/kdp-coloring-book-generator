@@ -11,7 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from rq import Worker, Queue, Connection
+from rq import SimpleWorker
 
 from app.core.config import settings
 from app.core.queue import get_redis_connection
@@ -30,9 +30,7 @@ def main():
     logger.info("Redis URL: %s", settings.redis_url)
 
     redis_conn = get_redis_connection()
-    queue = Queue(settings.rq_queue_name, connection=redis_conn)
-
-    worker = Worker([queue], connection=redis_conn)
+    worker = SimpleWorker([settings.rq_queue_name], connection=redis_conn)
     logger.info("Worker started, listening for jobs...")
     worker.work()
 

@@ -1,0 +1,4 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/books/{{jobId}}/download/interior"
+method: GET
+order: 7000

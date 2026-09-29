@@ -1,0 +1,13 @@
+# Use this workspace to collaborate
+workspace:
+  id: 8f02d8bc-30af-4853-8888-674c34e67565
+
+cloudResources:
+  collections:
+    ../postman/collections/KDP Coloring Book Generator API: db97f3db-ed37-461e-9a2d-147e950706fa
+
+# All resources in the `postman/` folder are automatically registered in Local View.
+# Point to additional files outside the `postman/` folder to register them individually. Example:
+#localResources:
+#  collections:
+#    - ../tests/E2E Test Collection/

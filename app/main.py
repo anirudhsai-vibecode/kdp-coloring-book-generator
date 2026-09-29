@@ -11,11 +11,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 
 from app.api.routes import router as api_router
+from app.api.credentials import router as credentials_router
 from app.core.config import settings, get_output_path
 
 # Configure logging
@@ -25,6 +27,10 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger(__name__)
+
+# Templates
+templates = Jinja2Templates(directory=str(ROOT / "app" / "templates"))
+templates.env.cache = None  # Disable cache to avoid jinja2 3.1+ cache bug
 
 
 @asynccontextmanager
@@ -64,13 +70,23 @@ def create_app() -> FastAPI:
 
     # Include API routes
     app.include_router(api_router)
+    app.include_router(credentials_router)
+
+    # Frontend route
+    @app.get("/")
+    async def frontend(request: Request):
+        logger.info("Frontend route called")
+        return templates.TemplateResponse(request, "index.html", {"request": request})
 
     # Health check endpoint
     @app.get("/health")
     async def health_check():
         return {"status": "healthy", "service": settings.app_name}
 
-    # Serve static files (output directory) for direct PDF access
+    # Serve static files
+    static_dir = ROOT / "app" / "static"
+    if static_dir.exists():
+        app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     output_dir = get_output_path()
     if output_dir.exists():
         app.mount("/output", StaticFiles(directory=str(output_dir)), name="output")

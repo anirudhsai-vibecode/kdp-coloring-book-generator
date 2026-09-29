@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KDP Coloring Book Generator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; }
+    .container { max-width: 800px; margin: 0 auto; padding: 24px; }
+    header { text-align: center; margin-bottom: 32px; }
+    h1 { color: #1a1a1a; font-size: 2rem; font-weight: 700; }
+    .subtitle { color: #666; margin-top: 8px; }
+    .card { background: white; border-radius: 12px; padding: 24px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); margin-bottom: 24px; }
+    .card h2 { font-size: 1.25rem; margin-bottom: 16px; color: #1a1a1a; }
+    .form-group { margin-bottom: 16px; }
+    label { display: block; font-weight: 500; margin-bottom: 6px; color: #333; }
+    select, input[type="number"], input[type="text"] {
+      width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 8px;
+      font-size: 1rem; transition: border-color 0.2s;
+    }
+    select:focus, input:focus { outline: none; border-color: #2563eb; }
+    .checkbox-group { display: flex; align-items: center; gap: 8px; }
+    .checkbox-group input { width: auto; }
+    .btn {
+      padding: 12px 24px; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600;
+      cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+    }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: #2563eb; color: white; width: 100%; }
+    .btn-primary:hover { opacity: 0.9; }
+    .btn-primary:disabled { background: #94a3b8; cursor: not-allowed; }
+    .btn-secondary { background: #e2e8f0; color: #334155; }
+    .job-status { display: none; }
+    .job-status.active { display: block; }
+    .progress-bar { height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin: 16px 0; }
+    .progress-fill { height: 100%; background: #2563eb; width: 0%; transition: width 0.3s; }
+    .status-text { color: #666; font-size: 0.9rem; margin-bottom: 8px; }
+    .download-links { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+    .download-links a {
+      padding: 10px 20px; background: #2563eb; color: white; text-decoration: none;
+      border-radius: 8px; font-weight: 500; transition: opacity 0.2s;
+    }
+    .download-links a:hover { opacity: 0.9; }
+    .download-links a.secondary { background: #10b981; }
+    .error { color: #dc2626; padding: 12px; background: #fef2f2; border-radius: 8px; margin-top: 16px; display: none; }
+    .error.visible { display: block; }
+    .spinner { display: inline-block; width: 16px; height: 16px; border: 2px solid #fff; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; margin-right: 8px; vertical-align: middle; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .theme-badge {
+      display: inline-block; padding: 4px 10px; background: #e2e8f0; border-radius: 999px;
+      font-size: 0.8rem; color: #334155; margin: 2px;
+    }
+    .themes-grid { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .status-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 999px;
+      font-size: 0.75rem; font-weight: 500;
+    }
+    .status-badge.valid { background: #d1fae5; color: #065f46; }
+    .status-badge.error { background: #fef2f2; color: #991b1b; }
+    .status-badge.untested { background: #e2e8f0; color: #334155; }
+    .slot-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 10px 0; border-bottom: 1px solid #e2e8f0;
+    }
+    .slot-row:last-child { border-bottom: none; }
+    .slot-info { flex: 1; }
+    .slot-label { font-weight: 600; color: #1a1a1a; }
+    .slot-acct { font-size: 0.85rem; color: #666; margin-top: 2px; font-family: monospace; }
+    .slot-actions { display: flex; gap: 8px; }
+    .btn-small {
+      padding: 6px 12px; border: none; border-radius: 6px; font-size: 0.85rem;
+      cursor: pointer; font-weight: 500; transition: opacity 0.2s;
+    }
+    .btn-small:hover { opacity: 0.9; }
+    .btn-test { background: #dbeafe; color: #1e40af; }
+    .btn-delete { background: #fee2e2; color: #991b1b; }
+    .btn-small:disabled { background: #e2e8f0; color: #94a3b8; cursor: not-allowed; }
+    .cred-submit-row { display: flex; gap: 12px; margin-top: 16px; }
+    .cred-submit-row .btn { flex: 1; padding: 10px; }
+    .cred-success {
+      color: #059669; padding: 10px; background: #ecfdf5; border-radius: 8px;
+      margin-top: 12px; font-size: 0.9rem; display: none;
+    }
+    .cred-success.visible { display: block; }
+    .cred-hint { font-size: 0.8rem; color: #94a3b8; margin-top: 6px; }
+    .creds-empty { color: #94a3b8; text-align: center; padding: 16px 0; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>KDP Coloring Book Generator</h1>
+      <p class="subtitle">Generate print-ready coloring books for Amazon KDP</p>
+    </header>
+
+    <div class="card">
+      <h2>Create New Book</h2>
+      <form id="book-form">
+        <div class="form-group">
+          <label for="theme">Theme</label>
+          <select id="theme" required>
+            <option value="">Loading themes...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="pages">Pages (1-50)</label>
+          <input type="number" id="pages" min="1" max="50" value="25" required>
+        </div>
+
+        <div class="form-group">
+          <label for="author">Author Name</label>
+          <input type="text" id="author" placeholder="Your Name Here">
+        </div>
+
+        <div class="form-group">
+          <label for="seed">Seed (optional, for reproducibility)</label>
+          <input type="number" id="seed" min="0" placeholder="e.g., 42">
+        </div>
+
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="dry_run" checked>
+          <label for="dry_run">Dry run (placeholder images, no API calls)</label>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <input type="checkbox" id="auto_approve" checked>
+          <label for="auto_approve">Auto-approve (skip manual review gate)</label>
+        </div>
+
+        <button type="submit" class="btn btn-primary" id="submit-btn">
+          <span class="btn-text">Generate Book</span>
+        </button>
+
+        <div class="error" id="error"></div>
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Cloudflare Credentials</h2>
+      <p style="color: #666; margin-bottom: 16px; font-size: 0.9rem;">
+        Manage Cloudflare Workers AI accounts for image generation. Up to 3 accounts supported for rotation on daily quota.
+      </p>
+      <div id="credentials-list">
+        <div class="creds-empty">Loading credentials...</div>
+      </div>
+
+      <form id="credentials-form" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid #e2e8f0;">
+        <div class="form-group">
+          <label for="new_account_id">Account ID</label>
+          <input type="text" id="new_account_id" placeholder="Cloudflare Account ID" required>
+        </div>
+        <div class="form-group">
+          <label for="new_api_token">API Token</label>
+          <input type="password" id="new_api_token" placeholder="Cloudflare API Token (Workers AI)" required>
+        </div>
+        <div class="cred-submit-row">
+          <button type="submit" class="btn btn-primary" id="test-cred-btn">Test & Save</button>
+        </div>
+        <div class="cred-hint">Test runs validation; on success, credentials are saved to the next available slot in .env</div>
+        <div class="cred-success" id="cred-success"></div>
+        <div class="error" id="cred-error"></div>
+      </form>
+    </div>
+
+    <div class="card job-status" id="job-status">
+      <h2>Job Progress</h2>
+      <div class="status-text" id="status-text">Initializing...</div>
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill"></div>
+      </div>
+      <div class="status-text" id="detail-text">Waiting for worker...</div>
+
+      <div class="download-links" id="download-links"></div>
+
+      <div class="error" id="job-error"></div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = '/api/v1';
+    let currentJobId = null;
+    let pollInterval = null;
+
+    // Load themes on page load
+    async function loadThemes() {
+      try {
+        const res = await fetch(`${API_BASE}/themes`);
+        const data = await res.json();
+        const select = document.getElementById('theme');
+        select.innerHTML = '<option value="">Select a theme (random if empty)</option>';
+        data.themes.forEach(t => {
+          const opt = document.createElement('option');
+          opt.value = t.key;
+          opt.textContent = `${t.display_name} (${t.subjects_count} subjects)`;
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Failed to load themes:', e);
+      }
+    }
+
+    // Submit form
+    document.getElementById('book-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('submit-btn');
+      const errorDiv = document.getElementById('error');
+
+      const payload = {
+        theme: document.getElementById('theme').value || null,
+        pages: parseInt(document.getElementById('pages').value),
+        author: document.getElementById('author').value || null,
+        seed: document.getElementById('seed').value ? parseInt(document.getElementById('seed').value) : null,
+        dry_run: document.getElementById('dry_run').checked,
+        auto_approve: document.getElementById('auto_approve').checked,
+        max_regen: 0,
+        require_user_review: !document.getElementById('auto_approve').checked,
+      };
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Submitting...';
+      errorDiv.classList.remove('visible');
+
+      try {
+        const res = await fetch(`${API_BASE}/books`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.detail || 'Failed to create job');
+
+        currentJobId = data.job_id;
+        document.getElementById('job-status').classList.add('active');
+        document.getElementById('book-form').style.display = 'none';
+        startPolling();
+      } catch (e) {
+        errorDiv.textContent = e.message;
+        errorDiv.classList.add('visible');
+        btn.disabled = false;
+        btn.innerHTML = '<span class="btn-text">Generate Book</span>';
+      }
+    });
+
+    // Poll job status
+    function startPolling() {
+      pollInterval = setInterval(async () => {
+        if (!currentJobId) return;
+
+        try {
+          const res = await fetch(`${API_BASE}/books/${currentJobId}`);
+          if (!res.ok) throw new Error('Job not found');
+          const data = await res.json();
+
+          updateUI(data);
+
+          if (data.status === 'completed' || data.status === 'failed') {
+            clearInterval(pollInterval);
+            if (data.status === 'completed') {
+              await loadDownloads();
+            }
+          }
+        } catch (e) {
+          console.error('Poll error:', e);
+        }
+      }, 2000);
+    }
+
+    function updateUI(data) {
+      const statusMap = {
+        'queued': { text: 'Queued', pct: 0 },
+        'running': { text: 'Generating pages...', pct: 30 },
+        'awaiting_review': { text: 'Awaiting review', pct: 90 },
+        'completed': { text: 'Complete!', pct: 100 },
+        'failed': { text: 'Failed', pct: 100 },
+        'paused': { text: 'Paused (quota)', pct: 50 },
+      };
+
+      const s = statusMap[data.status] || { text: data.status, pct: 0 };
+      document.getElementById('progress-fill').style.width = `${s.pct}%`;
+      document.getElementById('status-text').textContent = s.text;
+
+      if (data.metadata) {
+        document.getElementById('detail-text').textContent =
+          `${data.metadata.pages} pages • ${data.metadata.theme_display} • ${data.metadata.title}`;
+      }
+    }
+
+    async function loadDownloads() {
+      const linksDiv = document.getElementById('download-links');
+      try {
+        linksDiv.innerHTML = `
+          <a href="${API_BASE}/books/${currentJobId}/download/interior" download>Download Interior PDF</a>
+          <a href="${API_BASE}/books/${currentJobId}/download/cover" class="secondary" download>Download Cover PDF</a>
+        `;
+      } catch (e) {
+        linksDiv.innerHTML = '<p style="color:#666">Download links unavailable</p>';
+      }
+    }
+
+    // Reset to create another book
+    function resetForm() {
+      document.getElementById('job-status').classList.remove('active');
+      document.getElementById('book-form').style.display = 'block';
+      document.getElementById('submit-btn').disabled = false;
+      document.getElementById('submit-btn').innerHTML = '<span class="btn-text">Generate Book</span>';
+      currentJobId = null;
+      clearInterval(pollInterval);
+    }
+
+    // Add "Create Another" button after completion
+    setInterval(() => {
+      const jobStatus = document.getElementById('job-status');
+      if (jobStatus.classList.contains('active')) {
+        const existingBtn = document.getElementById('reset-btn');
+        if (!existingBtn && document.getElementById('status-text').textContent === 'Complete!') {
+          const btn = document.createElement('button');
+          btn.id = 'reset-btn';
+          btn.className = 'btn btn-secondary';
+          btn.style.marginTop = '16px';
+          btn.textContent = 'Create Another Book';
+          btn.onclick = resetForm;
+          document.getElementById('download-links').after(btn);
+        }
+      }
+    }, 1000);
+
+    loadThemes();
+    loadCredentials();
+
+    // Credentials management
+    async function loadCredentials() {
+      try {
+        const res = await fetch(`${API_BASE}/credentials`);
+        const data = await res.json();
+        renderCredentials(data);
+      } catch (e) {
+        console.error('Failed to load credentials:', e);
+        document.getElementById('credentials-list').innerHTML =
+          '<div class="creds-empty">Failed to load credentials</div>';
+      }
+    }
+
+    function renderCredentials(data) {
+      const container = document.getElementById('credentials-list');
+      if (data.total === 0) {
+        container.innerHTML = '<div class="creds-empty">No credentials configured. Add your first account below.</div>';
+        return;
+      }
+
+      let html = '';
+      data.accounts.forEach(acc => {
+        const statusClass = acc.valid ? 'valid' : (acc.status === 'error' ? 'error' : 'untested');
+        const statusText = acc.valid ? 'Valid' : (acc.status === 'error' ? 'Error' : 'Untested');
+        html += `
+          <div class="slot-row">
+            <div class="slot-info">
+              <div class="slot-label">Slot ${acc.slot}</div>
+              <div class="slot-acct">${acc.account_id}</div>
+            </div>
+            <div style="display: flex; align-items: center; gap: 12px;">
+              <span class="status-badge ${statusClass}">${statusText}</span>
+              <div class="slot-actions">
+                <button class="btn-small btn-test" onclick="testCredentialSlot(${acc.slot})" ${!acc.valid ? 'disabled' : ''}>Test</button>
+                <button class="btn-small btn-delete" onclick="deleteCredentialSlot(${acc.slot})">Remove</button>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    async function testCredentialSlot(slot) {
+      // Could implement re-test if needed
+      console.log('Test slot', slot);
+    }
+
+    async function deleteCredentialSlot(slot) {
+      if (!confirm(`Remove credentials from Slot ${slot}?`)) return;
+      try {
+        const res = await fetch(`${API_BASE}/credentials/${slot}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const data = await res.json();
+          throw new Error(data.detail || 'Failed to delete');
+        }
+        await loadCredentials();
+      } catch (e) {
+        alert('Failed to delete: ' + e.message);
+      }
+    }
+
+    // Credentials form submit
+    document.getElementById('credentials-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('test-cred-btn');
+      const errorDiv = document.getElementById('cred-error');
+      const successDiv = document.getElementById('cred-success');
+
+      const account_id = document.getElementById('new_account_id').value.trim();
+      const api_token = document.getElementById('new_api_token').value.trim();
+
+      if (!account_id || !api_token) {
+        errorDiv.textContent = 'Both Account ID and API Token are required';
+        errorDiv.classList.add('visible');
+        successDiv.classList.remove('visible');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = 'Testing & Saving...';
+      errorDiv.classList.remove('visible');
+      successDiv.classList.remove('visible');
+
+      try {
+        const res = await fetch(`${API_BASE}/credentials`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ account_id, api_token })
+        });
+        const data = await res.json();
+
+        if (!res.ok) throw new Error(data.detail || 'Failed to save');
+
+        successDiv.textContent = data.message + (data.is_duplicate ? ' (duplicate detected)' : '');
+        successDiv.classList.add('visible');
+
+        if (!data.is_duplicate) {
+          document.getElementById('new_account_id').value = '';
+          document.getElementById('new_api_token').value = '';
+        }
+
+        await loadCredentials();
+      } catch (e) {
+        errorDiv.textContent = e.message;
+        errorDiv.classList.add('visible');
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Test & Save';
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,4 @@
+$kind: http-request
+url: "{{baseUrl}}/api/v1/books/{{jobId}}/progress"
+method: GET
+order: 6000

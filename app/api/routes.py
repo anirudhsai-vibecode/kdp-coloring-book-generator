@@ -196,10 +196,10 @@ async def download_book_file(job_id: str, file_type: str) -> FileResponse:
         )
 
     if file_type == "interior":
-        file_path = metadata.get("interior_pdf") or metadata.get("paths", {}).get("interior")
+        file_path = metadata.get("interior_pdf")
         filename = f"{job_id}_interior.pdf"
     elif file_type == "cover":
-        file_path = metadata.get("cover_pdf") or metadata.get("paths", {}).get("cover")
+        file_path = metadata.get("cover_pdf")
         filename = f"{job_id}_cover.pdf"
     else:
         raise HTTPException(
@@ -243,7 +243,14 @@ async def approve_book(job_id: str) -> JSONResponse:
             detail="No metadata available",
         )
 
-    book_dir = Path(metadata.get("paths", {}).get("book_dir", ""))
+    # Get book directory from interior_pdf path
+    interior_pdf = metadata.get("interior_pdf", "")
+    if not interior_pdf:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No interior PDF path in metadata",
+        )
+    book_dir = Path(interior_pdf).parent
     if not book_dir.exists():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
