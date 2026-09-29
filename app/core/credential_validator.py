@@ -29,9 +29,21 @@ def validate_cloudflare_credentials(account_id: str, api_token: str) -> dict[str
         url = f"{CLOUDFLARE_API_BASE}/accounts/{account_id}"
         resp = requests.get(url, headers=headers, timeout=10)
         if resp.status_code != 200:
+            # Parse Cloudflare's error response for more detail
+            try:
+                error_data = resp.json()
+                cf_errors = error_data.get("errors", [])
+                if cf_errors:
+                    error_msgs = "; ".join(e.get("message", str(e)) for e in cf_errors)
+                    return {
+                        "valid": False,
+                        "error": f"Cloudflare error: {error_msgs}",
+                    }
+            except Exception:
+                pass
             return {
                 "valid": False,
-                "error": f"Account validation failed: {resp.status_code}",
+                "error": f"Account validation failed: {resp.status_code} - {resp.text[:200]}",
             }
 
         # Check if FLUX model is available
