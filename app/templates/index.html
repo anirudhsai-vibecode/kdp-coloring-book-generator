@@ -491,13 +491,37 @@
     }
     async function loadDownloads(jobId) {
       const linksDiv = $('#download-links');
+      linksDiv.innerHTML = `
+        <button onclick="downloadPDF('${jobId}', 'interior')" class="btn btn-secondary">Download Interior PDF</button>
+        <button onclick="downloadPDF('${jobId}', 'cover')" class="btn btn-secondary">Download Cover PDF</button>
+      `;
+    }
+    async function downloadPDF(jobId, fileType) {
+      const token = localStorage.getItem('authToken');
+      if (!token) {
+        alert('Not logged in. Please log in first.');
+        return;
+      }
       try {
-        linksDiv.innerHTML = `
-          <a href="${API_BASE}/books/${jobId}/download/interior" download class="btn btn-secondary">Download Interior PDF</a>
-          <a href="${API_BASE}/books/${jobId}/download/cover" class="btn btn-secondary">Download Cover PDF</a>
-        `;
+        const res = await fetch(`${API_BASE}/books/${jobId}/download/${fileType}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          alert(err.detail || 'Download failed');
+          return;
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${jobId}_${fileType}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
       } catch (e) {
-        linksDiv.innerHTML = '<p class="text-gray-500">Download links unavailable</p>';
+        alert('Download failed: ' + e.message);
       }
     }
     function startPolling() {
