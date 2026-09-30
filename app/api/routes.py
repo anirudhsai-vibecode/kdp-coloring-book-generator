@@ -333,9 +333,11 @@ async def download_book_file(job_id: str, file_type: str, user: User = Depends(g
 
     if file_type == "interior":
         pdf_bytes = get_pdf_bytes(job_id, "interior")
+        logger.info(f"Retrieved interior PDF for job {job_id}: {len(pdf_bytes) if pdf_bytes else 0} bytes")
         filename = f"{job_id}_interior.pdf"
     elif file_type == "cover":
         pdf_bytes = get_pdf_bytes(job_id, "cover")
+        logger.info(f"Retrieved cover PDF for job {job_id}: {len(pdf_bytes) if pdf_bytes else 0} bytes")
         filename = f"{job_id}_cover.pdf"
     else:
         raise HTTPException(
@@ -344,6 +346,7 @@ async def download_book_file(job_id: str, file_type: str, user: User = Depends(g
         )
 
     if pdf_bytes is None:
+        logger.error(f"PDF not found in Redis for job {job_id}, type {file_type}")
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"{file_type.capitalize()} PDF not found in storage",

@@ -135,6 +135,7 @@ def generate_book_job(params: dict[str, Any], timeout: int = 3600) -> dict[str, 
         with open(cover_path, "rb") as f:
             cover_bytes = f.read()
         # Store PDFs in Redis so API can serve them (different filesystem)
+        logger.info(f"Storing PDFsoring PDFs in Redis for job {job_id}: interior={len(interior_bytes)} bytes, cover={len(cover_bytes)} bytes")
         store_pdf_bytes(job_id, "interior", interior_bytes)
         store_pdf_bytes(job_id, "cover", cover_bytes)
 
