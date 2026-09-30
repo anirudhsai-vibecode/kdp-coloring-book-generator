@@ -7,12 +7,12 @@ from datetime import datetime
 from typing import Dict, List
 
 import bcrypt
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class User(BaseModel):
     """User model stored in Redis."""
-    id: str = str(uuid.uuid4())
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     email: str
     password_hash: str
     created_at: datetime = datetime.utcnow()
