@@ -99,3 +99,28 @@ def get_paused_jobs() -> list[str]:
     """Get all paused job IDs."""
     redis = get_redis_connection()
     return list(redis.smembers("paused_jobs"))
+
+
+# ----- PDF storage in Redis -----
+# The API service and worker run as separate Render instances with separate
+# disks, so local file paths are not shared. PDFs are stored as bytes in Redis
+# on job completion and served from Redis by the API.
+
+def store_pdf_bytes(job_id: str, file_type: str, pdf_bytes: bytes) -> bool:
+    """Store generated PDF bytes in Redis (key: pdf:{job_id}:{file_type})."""
+    redis = get_redis_connection()
+    key = f"pdf:{job_id}:{file_type}"
+    redis.set(key, pdf_bytes)
+    # Match the 24-hour result_ttl so downloads don't outlive the job record
+    redis.expire(key, 86400)
+    return True
+
+
+def get_pdf_bytes(job_id: str, file_type: str) -> bytes | None:
+    """Retrieve generated PDF bytes from Redis."""
+    redis = get_redis_connection()
+    key = f"pdf:{job_id}:{file_type}"
+    data = redis.get(key)
+    if data is None:
+        return None
+    return data if isinstance(data, bytes) else str(data).encode()

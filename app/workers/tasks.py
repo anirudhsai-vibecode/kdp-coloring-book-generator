@@ -24,6 +24,7 @@ from app.models.user import add_job_to_user
 # Import the pipeline function
 from kdp_coloring.pipeline import generate_book as pipeline_generate_book
 from src.kdp_coloring.image_gen import CloudflarePausedError, _is_cf_quota_error
+from app.core.queue import store_pdf_bytes
 
 logger = logging.getLogger(__name__)
 
@@ -127,6 +128,15 @@ def generate_book_job(params: dict[str, Any], timeout: int = 3600) -> dict[str, 
             total_pages=pages,
             message="Book generation complete, packaging PDFs...",
         )
+
+        # Read generated PDF bytes for Redis storage (API and worker are separate services)
+        with open(interior_path, "rb") as f:
+            interior_bytes = f.read()
+        with open(cover_path, "rb") as f:
+            cover_bytes = f.read()
+        # Store PDFs in Redis so API can serve them (different filesystem)
+        store_pdf_bytes(job_id, "interior", interior_bytes)
+        store_pdf_bytes(job_id, "cover", cover_bytes)
 
         # Add user_id to metadata
         metadata["user_id"] = user_id

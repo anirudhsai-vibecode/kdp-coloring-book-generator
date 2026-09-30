@@ -12,8 +12,8 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status, Response
+from fastapi.responses import JSONResponse
 
 from app.core.config import settings
 from app.core.queue import enqueue_book_generation, get_job, get_job_status, update_job_progress, add_job_to_user
@@ -332,10 +332,10 @@ async def download_book_file(job_id: str, file_type: str, user: User = Depends(g
         )
 
     if file_type == "interior":
-        file_path = metadata.get("interior_pdf")
+        pdf_bytes = get_pdf_bytes(job_id, "interior")
         filename = f"{job_id}_interior.pdf"
     elif file_type == "cover":
-        file_path = metadata.get("cover_pdf")
+        pdf_bytes = get_pdf_bytes(job_id, "cover")
         filename = f"{job_id}_cover.pdf"
     else:
         raise HTTPException(
@@ -343,16 +343,16 @@ async def download_book_file(job_id: str, file_type: str, user: User = Depends(g
             detail="file_type must be 'interior' or 'cover'",
         )
 
-    if not file_path or not Path(file_path).exists():
+    if pdf_bytes is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"{file_type.capitalize()} PDF not found",
+            detail=f"{file_type.capitalize()} PDF not found in storage",
         )
 
-    return FileResponse(
-        path=file_path,
-        filename=filename,
+    return Response(
+        content=pdf_bytes,
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 
 
