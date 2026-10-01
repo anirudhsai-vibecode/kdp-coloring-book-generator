@@ -6,235 +6,265 @@ Generate **print-ready Amazon KDP** coloring books for ages **3–7**:
 - Default **50** interior pages (use `--pages 25` for free-tier AI limits)
 - Trim size **8.5″ × 11″** (612 × 792 pt)
 - Full-wrap **cover PDF** (back + spine + front)
-- Free AI line art via **Cloudflare Workers AI (FLUX.1-schnell)** only (multi-account rotation on daily quota). Pollinations/HF are **not** used as generation fallback
-- `--dry-run` placeholders so the PDF pipeline works offline
+- Cloudflare Workers AI (FLUX.1-schnell) generation
+- FastAPI web service with async job queue (Redis/RQ)
+- Hard-FAIL QA gates (print-ready compliance)
+- **User authentication** (login / register) with JWT tokens
+- Job ownership – users only see their own jobs
+- Cloudflare quota handling – jobs pause on 4006 errors and resume when quota refills
+- **Job lookup** – check any job status by ID (useful after relogin)
 
-**No trademarked characters** (no Disney, Pokémon, Peppa Pig, etc.) — original cute subjects only.
+**No trademarked characters** — original cute subjects only.
 
 ---
 
-## Quick start
+## Quick Start
+
+### Option 1: CLI (Direct Generation)
 
 ```bash
-cd /workspace/kdp-coloring-book-generator
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# Offline verification (no API keys, no network for images)
+# Offline test (no API keys needed)
 python main.py --dry-run --pages 5
 
-# Full run (requires CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN)
+# Live generation (requires Cloudflare credentials in .env)
 python main.py --pages 25 --auto-approve
-
-# Specific theme + seed + author
-python main.py --theme dinosaurs --pages 50 --seed 42 --author "Your Name Here"
 ```
 
-List themes:
+### Option 2: Web UI (Recommended)
+
+#### Prerequisites
+- **Docker Desktop** (for Redis)
+- **Python 3.13+**
+- Cloudflare credentials (for live generation) – manageable from the UI
+
+#### 1. Start Redis
+```bash
+# Using Docker Desktop
+docker run -d --name redis -p 6379:6379 redis:7-alpine
+
+# Verify
+docker exec redis redis-cli ping
+# Should return: PONG
+```
+
+#### 2. Install Dependencies
+```bash
+pip install -r requirements.txt
+```
+
+#### 3. Configure Environment
+You can now add Cloudflare credentials **directly from the Web UI** (recommended):
+1. Start the app (steps 4–5 below)
+2. Open http://localhost:8000
+3. Scroll to the **Cloudflare Credentials** card
+4. Paste Account ID + API Token → click **Test & Save** — validated against the live Cloudflare API before saving to `.env`
+
+Or manually create `.env` in project root:
+```bash
+# Required for live generation (optional for dry-run)
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+CLOUDFLARE_API_TOKEN=your_token
+
+# Optional rotation accounts
+CLOUDFLARE_ACCOUNT_ID_2=...
+CLOUDFLARE_API_TOKEN_2=...
+CLOUDFLARE_ACCOUNT_ID_3=...
+CLOUDFLARE_API_TOKEN_3=...
+
+# Author name (default: "Your Name Here")
+AUTHOR=Your Name
+
+# JWT secret (required for auth)
+JWT_SECRET_KEY=your-super-secret-key-change-in-production
+```
+
+#### 4. Start API Server
+```bash
+uvicorn app.main:app --reload
+# Or: python -m uvicorn app.main:app --reload
+```
+- API docs: http://localhost:8000/docs
+- Web UI: http://localhost:8000
+
+#### 5. Start Worker (in separate terminal)
+```bash
+python worker.py
+```
+
+#### 6. Generate a Book
+Open http://localhost:8000 in your browser:
+1. **Login / Register** – create an account or log in.
+2. After login, the **Create New Book** form appears.
+3. **Cloudflare Credentials** card (top) – add your Account ID + API Token (tested live before saving to `.env`)
+4. Select theme, pages, author
+5. Check "Dry run" for offline testing
+6. Click "Generate Book"
+7. Watch real-time progress
+8. Download Interior/Cover PDFs when complete
+
+#### 7. Lookup a Job (after relogin)
+If you get logged out (network issue, session expiry, etc.) and want to check the status of a previously started job:
+1. Log back in
+2. Scroll to the **Job Lookup** section (below the Cloudflare Credentials card)
+3. Enter the Job ID you received when you originally created the job
+4. Click **Lookup Job** – the current status (Queued, Running, Awaiting Review, Completed, Failed, Paused) will be displayed
+5. If the job completed, download links will appear in the main Job Progress card
+
+---
+
+## Authentication
+
+The web service now requires a JWT token for all job‑related endpoints.
+
+- **Register**: `POST /api/v1/auth/register` with `{email, password}`
+- **Login**: `POST /api/v1/auth/login` with `{email, password}` → returns `{access_token, token_type}`
+- **Me**: `GET /api/v1/auth/me` (Bearer token) → returns user info
+- **Logout**: remove the token from client storage (no server‑side state)
+
+In the web UI, after login the token is stored in `localStorage` and automatically attached to every API request.  
+If you prefer to use curl or Postman, copy the `access_token` from the login response and add the header:
 
 ```bash
-python main.py --list-themes
+curl -H "Authorization: Bearer <access_token>" \
+     -X POST http://localhost:8000/api/v1/books \
+     -H "Content-Type: application/json" \
+     -d '{"theme":"cute","pages":25,"author":"Alice"}'
+
+# Lookup a job via API:
+curl -H "Authorization: Bearer <access_token>" \
+     http://localhost:8000/api/v1/books/<job_id>
 ```
 
 ---
 
-## CLI options
+## Job Lookup Endpoint
 
-| Flag | Description |
-|------|-------------|
-| `--pages N` | Coloring page count (default 50) |
-| `--theme NAME` | Theme key/name; omit for random |
-| `--seed N` | Reproducible RNG seed |
-| `--author "..."` | Cover author (default placeholder) |
-| `--dry-run` | Pillow placeholder line art (no network) |
-| `--list-themes` | Show themes and exit |
-| `--output-dir PATH` | Override output root |
-| `--max-regen N` | Hard cap after N exit-gate FAILs per page; force-save last FAIL as final (default: **0** = unlimited until PASS; `N>0` = opt-in CF-conservation cap) |
-| `--require-user-review` / `--no-require-user-review` | Block packaging until USER_APPROVED.json (default: on) |
-| `--auto-approve` | Skip user-review gate (automation) |
-| `--packaging-only DIR` | Build PDFs for an existing PASS book dir |
-| `--skip-exit-gate` | Escape hatch — skip image QA (not for production) |
+**POST** `/api/v1/auth/lookup` – Lookup a job by ID (requires authentication)
 
-Output layout:
+This endpoint allows users to find any job by its ID, but only if they are authenticated. The job ownership check ensures users can only see jobs they created.
 
-```
-output/<slug>-<timestamp>/
-  images/page_001.png …
-  images/raw/page_001.png …
-  failed_dump/page-01-attempt-1.png …
-  failed_dump/manifest.json
-  AWAITING_USER_REVIEW.json   # when --require-user-review and not yet approved
-  USER_APPROVED.json          # create this to unlock packaging
-  PACKAGING_DONE.json         # after PDFs built
-  interior.pdf
-  cover.pdf
-  metadata.json
-```
+**Response** – Returns the same data as `/api/v1/books/{job_id}`.
 
 ---
 
-## Free-tier AI notes
+## Web API Endpoints
 
-### Cloudflare Workers AI only (FLUX.1-schnell)
-
-Live generation uses **Cloudflare Workers AI** exclusively. Pollinations and Hugging Face are **removed** from the provider fallback chain.
-
-1. Create one or more free Cloudflare accounts and Workers AI API tokens (Run permission).
-2. Copy `.env.example` → `.env` and set:
-   - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` (primary)
-   - Optional rotation: `CLOUDFLARE_ACCOUNT_ID_2` / `CLOUDFLARE_API_TOKEN_2`
-   - Optional rotation: `CLOUDFLARE_ACCOUNT_ID_3` / `CLOUDFLARE_API_TOKEN_3`
-3. The same keys are also loaded from `/home/box/agent-data/box-secrets.json` → `card` when present (Grok Bot).
-4. Model: `@cf/black-forest-labs/flux-1-schnell` (`cloudflare_steps` in `config.yaml`; free ~10,000 Neurons/day per account).
-5. On HTTP **429** with code **4006** / message containing **daily free allocation** or **10000 neurons**, the generator **rotates to the next unused account immediately**. If all accounts are exhausted → **STATUS PAUSED** (resume ~5:30 AM IST). Every FAIL is dumped. Default is unlimited until PASS (no force-save); only an opt-in `--max-regen N` (N>0) force-saves the last FAIL as the page final.
-6. Outputs still go through `postprocess_line_art` for kids outline pages.
-
-Never commit real tokens. The app reads credentials only from the environment / `.env` / box-secrets and does not log them.
-
-### Pipeline locks
-
-- **Regen limit**: each page regenerates until the exit gate PASSes. Default `--max-regen 0` = **unlimited until PASS** (never force-save a FAIL as final). Opt-in `--max-regen N` (N>0) caps FAILs then force-saves the last FAIL (CF-conservation only).
-- **failed_dump/**: every exit-gate FAIL is copied to `output/<book>/failed_dump/page-NN-attempt-K.png` with `manifest.json`.
-- **User review**: `--require-user-review` (default true) writes `AWAITING_USER_REVIEW.json` and blocks PDF packaging until `USER_APPROVED.json` appears, or pass `--auto-approve`.
-- **Theme lock**: pet themes require pet subjects; garden chores / jars-as-main-subject / farm tools are rejected unless pet-related. See `theme_lock` in `config.yaml` and `build_prompt()`.
-
-### Dry-run
-
-`--dry-run` draws simple geometric line art with Pillow. Use this to validate PDFs and KDP layout without any AI service.
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `GET` | `/api/v1/themes` | List all themes |
+| `POST` | `/api/v1/books` | Enqueue job (returns `job_id`) – **requires auth** |
+| `GET` | `/api/v1/books/{job_id}` | Job status + metadata – **requires auth + ownership** |
+| `GET` | `/api/v1/books/{job_id}/progress` | Real-time progress (SSE-ready) – **requires auth** |
+| `GET` | `/api/v1/books/{job_id}/download/interior` | Download interior PDF – **requires auth + ownership** |
+| `GET` | `/api/v1/books/{job_id}/download/cover` | Download cover PDF – **requires auth + ownership** |
+| `POST` | `/api/v1/books/{job_id}/approve` | Approve awaiting-review job – **requires auth + ownership** |
+| `POST` | `/api/v1/credentials/test` | Test Cloudflare credentials (no save) |
+| `POST` | `/api/v1/credentials` | Save validated credentials to `.env` |
+| `GET` | `/api/v1/credentials` | List configured accounts with status |
+| `DELETE` | `/api/v1/credentials/{slot}` | Remove credentials from slot (1–3) |
+| `POST` | `/api/v1/credentials/reload` | Force reload from `.env` |
+| `POST` | `/api/v1/auth/register` | User registration |
+| `POST` | `/api/v1/auth/login` | Login – returns JWT access token |
+| `GET`  | `/api/v1/auth/me` | Get current user info (Bearer token) |
+| `POST` | `/api/v1/auth/logout` | Logout (client‑side token removal) |
 
 ---
 
-## Configuration
+## Configuration Files
 
-- `config.yaml` — page size, margins, bleed, spine factors, image size, provider
-- `.env` / `.env.example` — `CLOUDFLARE_ACCOUNT_ID`/`_TOKEN` (+ optional `_2`/`_3`), `AUTHOR`
-- `src/kdp_coloring/themes.yaml` — themes, title templates, subject pools
-
-### Spine width (KDP B&W paperback)
-
-```
-white paper: spine_inches ≈ page_count × 0.002252
-cream paper: spine_inches ≈ page_count × 0.0025
-```
-
-Always **confirm with the [Amazon KDP Cover Calculator](https://kdp.amazon.com/cover-calculator)** before uploading. Factors are configurable in `config.yaml`.
-
-Cover PDF size (with 0.125″ bleed):
-
-```
-width  = bleed + 8.5 + spine + 8.5 + bleed
-height = bleed + 11 + bleed
-```
+| File | Purpose |
+|------|---------|
+| `config.yaml` | Page size, margins, bleed, spine factors, AI thresholds |
+| `.env` | Cloudflare credentials, author name, JWT secret (managed via UI or CLI) |
+| `app/core/config.py` | Web service settings (Redis URL, queue name, etc.) |
+| `src/kdp_coloring/themes.yaml` | Theme definitions, subject pools |
+| `qa_checks/THRESHOLDS.md` | QA gate thresholds |
 
 ---
 
-## KDP upload checklist
+## Logging
 
-1. **Interior**
-   - Upload `interior.pdf`
-   - Trim: **8.5″ × 11″**
-   - Interior: **Black & white** (or “Premium color” only if you intentionally add color — this tool targets B&W line art)
-   - Paper: **White** (or Cream — match `config.yaml` paper / spine factor)
-   - No page numbers required; keep art inside ~0.5″ margins (configured)
+All modules use Python `logging` with a consistent format:
+```
+%(asctime)s [%(levelname)s] %(name)s: %(message)s
+```
 
-2. **Cover**
-   - Upload `cover.pdf` (full wrap: back | spine | front)
-   - Or rebuild in KDP Cover Creator using title/author from `metadata.json`
-   - Leave KDP barcode area clear (marked on back cover)
-   - Verify spine text is readable for your page count
-
-3. **Metadata**
-   - Replace author placeholder before publishing
-   - Replace back-cover blurb placeholder
-   - Categories: Children’s Books → Activity Books / Coloring Books
-   - Age range: 3–7
-   - Keywords: avoid trademarked character names
-
-4. **Quality**
-   - Spot-check pages for muddy gray fills; re-run problem pages or use dry-run style if needed
-   - Confirm no copyrighted/trademarked characters appear in AI output
-   - Order a proof copy before wide release
-
-5. **Free-tier tip**
-   - Start with `--pages 25` while testing AI generation
-   - Scale to 50 once prompts/provider are stable
+- **App / Worker**: `logging.basicConfig()` initialized in `app/main.py` and `worker.py` (INFO level, H:M:S timestamps)
+- **Pipeline modules**: `logger = logging.getLogger(__name__)` at module level
+- **Key events logged**:
+  - Book generation start/completion with params
+  - Per-page image generation progress
+  - PDF assembly (interior/cover)
+  - Cloudflare account rotation on quota exhaustion
+  - QA gate passes/failures
+  - Authentication events (login, register, token validation)
+  - Job lookup requests
 
 ---
 
-## Themes included
+## Spine Width (KDP B&W Paperback)
 
-Animals, farm, ocean, dinosaurs, vehicles, alphabet, numbers, seasons, space, insects, birds, food, pets, jungle, arctic, construction, garden, weather, sports.
+```
+white paper:  spine_inches ≈ page_count × 0.002252
+cream paper:  spine_inches ≈ page_count × 0.0025
+```
 
-Each theme has title templates and a large subject pool so pages get different prompts.
+Always verify with the [Amazon KDP Cover Calculator](https://kdp.amazon.com/cover-calculator).
 
 ---
 
+## KDP Upload Checklist
 
-## QA hard-FAIL gates
+1. **Interior** — Upload `interior.pdf` | Trim: 8.5″×11″ | B&W | Paper: White/Cream | Keep art inside 0.5″ margins
+2. **Cover** — Upload `cover.pdf` (full wrap) | Leave barcode area clear | Verify spine text readability
+3. **Metadata** — Replace author placeholder | Categories: Children's Books → Activity/Coloring | Age: 3–7
+4. **Quality** — Spot-check for gray fills | No trademarked characters | Order proof copy
+5. **Free-tier tip** — Start with `--pages 25` while testing
 
-Automated print QA for page images and KDP PDF packages. Exit code **0** = all hard checks PASS; **1** = any hard FAIL. Soft checks print `WARNING` / `SKIP` only.
+---
 
-Thresholds are documented in [`qa_checks/THRESHOLDS.md`](qa_checks/THRESHOLDS.md).
+## Development
 
-### Page Factory exit gate (before QA handoff)
-
-After generate, before QA: run the exit gate. On FAIL → regenerate; do **not** send to QA. Wired into `main.py` by default (`--max-regen 0` = unlimited until PASS; opt-in `--max-regen N` may force-save after N FAILs; escape with `--skip-exit-gate`). Details: [`docs/PAGE_FACTORY.md`](docs/PAGE_FACTORY.md).
-
+### Run Tests
 ```bash
-python scripts/page_factory_exit_gate.py path/to/images_dir
+python -m pytest
 ```
 
-```bash
-# Image pages (PNG/JPG) — canvas, pure B&W, margins, solid fills, wire-grid,
-# hairlines, eyes/pupils heuristic (default ON; --skip-eyes to disable)
-python scripts/qa_gate.py images path/to/dir
-python scripts/qa_gate.py images path/to/page.png
-
-# Optional near-dupe soft FLAG; chore-class hard FAIL with --scene-list
-python scripts/qa_gate.py images path/to/dir --prior-scenes prior_scenes.json
-python scripts/qa_gate.py images path/to/dir --scene-list scenes.yaml
-
-# PDF package — interior and/or cover (page numbers hard FAIL on interior)
-python scripts/qa_gate.py pdf --interior output/.../interior.pdf \
-  --front-matter-pages 4 --designs 32
-
-python scripts/qa_gate.py pdf --interior output/.../interior.pdf \
-  --cover output/.../cover.pdf --pages 68 --spine-factor 0.002252 \
-  --author-text metadata_author.txt
-```
-
-Expected interior layout for **32 designs**: `[N front-matter] + [art, blank]×32` (default N=4 → **68** pages, even). Cover spine ≈ `pages × 0.002252` (white B&W); wrap H ≈ 11.25″. Optional barcode-zone + page-number corner raster needs `pdf2image` + poppler (page numbers still checked via extractable text; drawn-only numerals FAIL until pdf2image is available).
-
-## Project layout
-
+### Project Structure
 ```
 kdp-coloring-book-generator/
-  main.py
-  config.yaml
-  requirements.txt
-  .env.example
-  README.md
-  docs/
-    MASTER_PROMPT.md
-    PAGE_FACTORY.md
-  scripts/
-    qa_gate.py
-    page_factory_exit_gate.py
-  qa_checks/
-    THRESHOLDS.md
-  src/kdp_coloring/
-    config.py
-    themes.py
-    themes.yaml
-    image_gen.py
-    placeholders.py
-    pdf_builder.py
-  output/
+├── main.py                    # CLI entrypoint
+├── worker.py                  # RQ worker entrypoint
+├── config.yaml                # Core configuration
+├── requirements.txt           # Python dependencies
+├── Dockerfile                 # Fly.io container
+├── fly.toml                   # Fly.io deployment config
+├── app/
+│   ├── main.py               # FastAPI app + frontend
+│   ├── templates/index.html  # Web UI (now with Job Lookup card)
+│   ├── api/routes.py         # REST endpoints (job + auth + lookup)
+│   ├── api/auth.py           # Auth endpoints
+│   ├── middleware/auth.py    # JWT auth middleware
+│   ├── core/token_utils.py   # JWT create/verify helpers
+│   ├── workers/tasks.py      # RQ job handlers
+│   ├── core/config.py        # Settings
+│   ├── core/queue.py         # Redis/RQ helpers
+│   └── models/
+│       ├── user.py           # User model + helpers
+│       └── schemas.py        # Pydantic models (jobs, themes, etc.)
+├── src/kdp_coloring/
+│   ├── pipeline.py           # Core generate_book()
+│   ├── config.py             # Config loader
+│   ├── themes.py             # Theme logic
+│   ├── image_gen.py          # Cloudflare image generation
+│   ├── pdf_builder.py        # PDF assembly
+│   └── themes.yaml           # Theme data
+├── scripts/qa_gate.py        # Hard-FAIL QA
+└── output/                   # Generated books
 ```
 
 ---
 
-## License / responsibility
+## License / Responsibility
 
 You are responsible for reviewing AI-generated art for trademark/copyright issues before publishing on KDP. This tool is a helper for original, age-appropriate coloring books — not a source of branded character content.

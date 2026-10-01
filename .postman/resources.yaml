@@ -1,0 +1,15 @@
+# Use this workspace to collaborate
+workspace:
+  id: 8f02d8bc-30af-4853-8888-674c34e67565
+
+# Each entry here maps a local resource to one or more corresponding objects in Postman Cloud
+
+cloudResources:
+  collections:
+    ../postman/collections/KDP‑Coloring‑Book API: 54a8c752-b24f-4e82-bf17-3868ad97616d
+
+# All resources in the `postman/` folder are automatically registered in Local View.
+# Point to additional files outside the `postman/` folder to register them individually. Example:
+#localResources:
+#  collections:
+#    - ../tests/E2E Test Collection/

@@ -3,8 +3,8 @@
 Hard-FAIL QA gates for KDP coloring-book image pages and PDF packages.
 
 Exit codes:
-  0 — all hard checks PASS
-  1 — one or more hard FAILs
+  0 -- all hard checks PASS
+  1 -- one or more hard FAILs
 
 See qa_checks/THRESHOLDS.md for exact thresholds.
 """
@@ -57,7 +57,7 @@ WIRE_WINDOW = 400
 WIRE_STRIDE = 200
 WIRE_RUN_LIMIT = 40
 HAIRLINE_ROW_STEP = 25
-HAIRLINE_MEDIAN_MAX = 5  # median horizontal run < 5 → evaluate thin1
+HAIRLINE_MEDIAN_MAX = 5  # median horizontal run < 5 -> evaluate thin1
 HAIRLINE_THIN1_FRAC = 0.01  # fail if > 1% of runs are length-1
 
 PAGE_W_PT, PAGE_H_PT = 612.0, 792.0
@@ -82,7 +82,7 @@ EYES_MAX_AREA_FRAC = 0.04  # of face-region pixels
 EYES_MAX_ASPECT = 2.2
 EYES_MIN_FILL = 0.35
 
-# Chore / tool action classes — same class twice in one book = hard FAIL.
+# Chore / tool action classes -- same class twice in one book = hard FAIL.
 # Patterns are lowercase substrings; longer / more specific first within each class.
 CHORE_CLASS_PATTERNS: list[tuple[str, tuple[str, ...]]] = [
     ("broom-sweep", ("broom", "sweeping", "sweep the", "sweeping the floor")),
@@ -148,7 +148,7 @@ def _print_report(reports: Sequence[FileReport], title: str) -> int:
         for c in r.checks:
             tag = c.status
             soft = "" if c.hard else " (soft)"
-            detail = f" — {c.detail}" if c.detail else ""
+            detail = f" -- {c.detail}" if c.detail else ""
             print(f"  {tag:8s} {c.name}{soft}{detail}")
     print()
     if any_fail:
@@ -175,9 +175,9 @@ def _black_mask(gray: np.ndarray, thr: int = 128) -> np.ndarray:
 def check_canvas(rep: FileReport, im: Image.Image) -> None:
     w, h = im.size
     if w == CANVAS_W and h == CANVAS_H:
-        rep.add("canvas", "PASS", f"{w}×{h} portrait")
+        rep.add("canvas", "PASS", f"{w}x{h} portrait")
     else:
-        rep.add("canvas", "FAIL", f"got {w}×{h}, need {CANVAS_W}×{CANVAS_H} portrait")
+        rep.add("canvas", "FAIL", f"got {w}x{h}, need {CANVAS_W}x{CANVAS_H} portrait")
 
 
 def check_pure_bw(rep: FileReport, im: Image.Image, gray: np.ndarray) -> None:
@@ -187,7 +187,7 @@ def check_pure_bw(rep: FileReport, im: Image.Image, gray: np.ndarray) -> None:
     mid = int(np.count_nonzero((gray >= 2) & (gray <= 253)))
     # unique colors on RGB or L
     rgb = np.array(im.convert("RGB"))
-    # subsample for speed on ncolors estimate if huge — full unique on reshaped
+    # subsample for speed on ncolors estimate if huge -- full unique on reshaped
     flat = rgb.reshape(-1, 3)
     # Use view-based unique count
     dtype = np.dtype((np.void, flat.dtype.itemsize * 3))
@@ -198,9 +198,9 @@ def check_pure_bw(rep: FileReport, im: Image.Image, gray: np.ndarray) -> None:
     else:
         parts = []
         if mid:
-            parts.append(f"mid_gray_pixels={mid} (L in 2–253 must be 0)")
+            parts.append(f"mid_gray_pixels={mid} (L in 2-253 must be 0)")
         if ncolors > 2:
-            parts.append(f"ncolors={ncolors} (≤2 required, or mode 1)")
+            parts.append(f"ncolors={ncolors} (<=2 required, or mode 1)")
         rep.add("pure_bw", "FAIL", "; ".join(parts) or "not pure B&W")
 
 
@@ -218,7 +218,7 @@ def check_margin_ink(rep: FileReport, gray: np.ndarray) -> None:
     border[:, -m:] = True
     count = int(np.count_nonzero(ink & border))
     if count == 0:
-        rep.add("margin_ink", "PASS", f"0 ink pixels in {m}px (0.5″) margin")
+        rep.add("margin_ink", "PASS", f'0 ink pixels in {m}px (0.5") margin')
     else:
         rep.add("margin_ink", "FAIL", f"{count} ink pixels in {m}px margin strip")
 
@@ -228,7 +228,7 @@ def _is_filled_region(mask_cc: np.ndarray, area: int) -> bool:
 
     Thick connected outline art survives mild erosion and used to false-positive
     as solid_fills, which pushed postprocess into morph-ring ribbons. Exclude
-    stroke-like CCs via low bbox fill-ratio or high perimeter²/area.
+    stroke-like CCs via low bbox fill-ratio or high perimeter^2/area.
     """
     ys, xs = np.where(mask_cc)
     if len(xs) == 0:
@@ -326,7 +326,7 @@ def _count_distinct_thin_lines(win: np.ndarray, horizontal: bool) -> int:
     Count distinct thin straight line strokes in a window.
 
     Uses morphological opening to keep long thin segments, then collapses
-    adjacent rows/cols so a 2–3 px stroke counts as one run (not dozens).
+    adjacent rows/cols so a 2-3 px stroke counts as one run (not dozens).
     """
     u8 = (win.astype(np.uint8) * 255)
     if cv2 is not None:
@@ -406,7 +406,7 @@ def check_hollow_ribbons(rep: FileReport, gray: np.ndarray) -> None:
         rep.add(
             "hollow_ribbons",
             "FAIL",
-            "hollow double-outline ribbons — " + "; ".join(reasons),
+            "hollow double-outline ribbons -- " + "; ".join(reasons),
         )
     else:
         rep.add(
@@ -434,7 +434,7 @@ def check_wire_grid(rep: FileReport, gray: np.ndarray) -> None:
         rep.add(
             "wire_grid",
             "FAIL",
-            f"{worst} thin parallel/orthogonal runs in 400×400 @ {worst_pos} (limit {WIRE_RUN_LIMIT})",
+            f"{worst} thin parallel/orthogonal runs in 400x400 @ {worst_pos} (limit {WIRE_RUN_LIMIT})",
         )
     else:
         rep.add("wire_grid", "PASS", f"max window score={worst} (limit {WIRE_RUN_LIMIT})")
@@ -502,7 +502,7 @@ def _count_pupil_like_blobs(face_ink: np.ndarray) -> tuple[int, str]:
     """
     Best-effort: count small dark circular-ish components in a face crop.
 
-    Heuristic only — line-art pupils vary; use --skip-eyes if unreliable for a run.
+    Heuristic only -- line-art pupils vary; use --skip-eyes if unreliable for a run.
     """
     h, w = face_ink.shape
     if h < 8 or w < 8:
@@ -540,7 +540,7 @@ def _count_pupil_like_blobs(face_ink: np.ndarray) -> tuple[int, str]:
                     if circ < 0.45:
                         continue
             pupils += 1
-        return pupils, f"cv2 CC pupils={pupils} (face {w}×{h})"
+        return pupils, f"cv2 CC pupils={pupils} (face {w}x{h})"
 
     # Numpy fallback: scan for compact dark blobs via local bounding boxes of CCs
     visited = np.zeros_like(face_ink, dtype=bool)
@@ -570,7 +570,7 @@ def _count_pupil_like_blobs(face_ink: np.ndarray) -> tuple[int, str]:
         fill = area / max(1, bw * bh)
         if aspect <= EYES_MAX_ASPECT and fill >= EYES_MIN_FILL and bw >= 3 and bh >= 3:
             pupils += 1
-    return pupils, f"numpy CC pupils={pupils} (face {w}×{h})"
+    return pupils, f"numpy CC pupils={pupils} (face {w}x{h})"
 
 
 def check_eyes_pupils(rep: FileReport, gray: np.ndarray, *, skip: bool = False) -> None:
@@ -590,7 +590,7 @@ def check_eyes_pupils(rep: FileReport, gray: np.ndarray, *, skip: bool = False) 
         rep.add(
             "eyes_pupils",
             "FAIL",
-            "heuristic: no subject ink — cannot locate face/pupils",
+            "heuristic: no subject ink -- cannot locate face/pupils",
         )
         return
 
@@ -601,7 +601,7 @@ def check_eyes_pupils(rep: FileReport, gray: np.ndarray, *, skip: bool = False) 
         rep.add(
             "eyes_pupils",
             "FAIL",
-            f"heuristic: subject bbox {bw}×{bh} too small for face/pupils",
+            f"heuristic: subject bbox {bw}x{bh} too small for face/pupils",
         )
         return
 
@@ -616,7 +616,7 @@ def check_eyes_pupils(rep: FileReport, gray: np.ndarray, *, skip: bool = False) 
             "eyes_pupils",
             "FAIL",
             f"heuristic: no dark pupil-like blobs in upper-half face "
-            f"(found {n_pupils}, need ≥{EYES_MIN_PUPILS}); {detail}. "
+            f"(found {n_pupils}, need >= {EYES_MIN_PUPILS}); {detail}. "
             f"Re-generate with clear visible eyes/pupils, or pass --skip-eyes",
         )
     else:
@@ -667,7 +667,7 @@ def check_near_dupe(
         rep.add(
             "near_dupe",
             "FAIL",
-            f"chore-class hard dupe: «{chore_hit}» also in prior «{chore_prior[:80]}» "
+            f"chore-class hard dupe: <<{chore_hit}>> also in prior <<{chore_prior[:80]}>> "
             f"(Jaccard={best_j:.2f})",
             hard=True,
         )
@@ -676,7 +676,7 @@ def check_near_dupe(
         rep.add(
             "near_dupe",
             "WARNING",
-            f"Jaccard={best_j:.2f} vs prior «{best_prior[:80]}»",
+            f"Jaccard={best_j:.2f} vs prior <<{best_prior[:80]}>>",
             hard=False,
         )
     else:
@@ -707,7 +707,7 @@ def check_chore_class_dupes(
         by_class.setdefault(cls, []).append(f"page {page}: {subject[:60]}")
     dupes = {k: v for k, v in by_class.items() if len(v) >= 2}
     if dupes:
-        parts = [f"{cls} → {'; '.join(pages)}" for cls, pages in sorted(dupes.items())]
+        parts = [f"{cls} -> {'; '.join(pages)}" for cls, pages in sorted(dupes.items())]
         rep.add(
             "chore_class_dupe",
             "FAIL",
@@ -847,13 +847,13 @@ def check_page_size(rep: FileReport, reader: Any) -> None:
         # allow landscape swap? interior must be portrait 612x792
         ok = abs(w - PAGE_W_PT) <= PT_TOL and abs(h - PAGE_H_PT) <= PT_TOL
         if not ok:
-            bad.append(f"p{i+1}:{w:.1f}×{h:.1f}")
+            bad.append(f"p{i+1}:{w:.1f}x{h:.1f}")
             if len(bad) >= 5:
                 break
     if bad:
-        rep.add("page_size", "FAIL", f"expected {PAGE_W_PT}×{PAGE_H_PT} pt; bad e.g. {', '.join(bad)}")
+        rep.add("page_size", "FAIL", f"expected {PAGE_W_PT}x{PAGE_H_PT} pt; bad e.g. {', '.join(bad)}")
     else:
-        rep.add("page_size", "PASS", f"all pages {PAGE_W_PT}×{PAGE_H_PT} pt (±{PT_TOL})")
+        rep.add("page_size", "PASS", f"all pages {PAGE_W_PT}x{PAGE_H_PT} pt (+/-{PT_TOL})")
 
 
 def check_page_count_layout(
@@ -876,8 +876,8 @@ def check_page_count_layout(
             "art_blank_pairs",
             "FAIL",
             f"after front-matter {front_matter}: remaining={remaining}, "
-            f"expected {expected} ({designs} designs × art+blank). "
-            f"Layout: [N front] + [art,blank]×designs → total N+2×designs",
+            f"expected {expected} ({designs} designs x art+blank). "
+            f"Layout: [N front] + [art,blank]xdesigns -> total N+2xdesigns",
         )
     else:
         rep.add(
@@ -984,8 +984,8 @@ def check_cover_geometry(
     spine_ok = abs(inferred_spine - spine) <= SPINE_TOL_IN or abs(w_in - wrap_w) <= SPINE_TOL_IN
     h_ok = abs(h_in - wrap_h) <= SPINE_TOL_IN or abs(h_pt - wrap_h * 72) <= PT_TOL
     details = (
-        f"expected spine={spine:.6f}in (±{SPINE_TOL_IN}), wrap≈{wrap_w:.6f}×{wrap_h}; "
-        f"MediaBox={w_in:.6f}×{h_in:.6f}in (inferred_spine={inferred_spine:.6f})"
+        f"expected spine={spine:.6f}in (+/-{SPINE_TOL_IN}), wrap~={wrap_w:.6f}x{wrap_h}; "
+        f"MediaBox={w_in:.6f}x{h_in:.6f}in (inferred_spine={inferred_spine:.6f})"
     )
     if spine_ok and h_ok:
         rep.add("cover_geometry", "PASS", details)
@@ -1024,7 +1024,7 @@ def check_cover_geometry(
         rep.add(
             "spine_text",
             "SKIP",
-            f"spine={spine:.4f}in ≥ {SPINE_TEXT_MIN_IN}; text expected/allowed",
+            f"spine={spine:.4f}in >= {SPINE_TEXT_MIN_IN}; text expected/allowed",
             hard=False,
         )
 
@@ -1038,7 +1038,7 @@ def check_barcode_zone(rep: FileReport, cover_path: Path) -> None:
             "barcode_zone",
             "SKIP",
             "TODO: install optional pdf2image (+ poppler) to rasterize cover and "
-            f"verify back bottom-right ~{BARCODE_W_IN}×{BARCODE_H_IN} in clear",
+            f"verify back bottom-right ~{BARCODE_W_IN}x{BARCODE_H_IN} in clear",
             hard=False,
         )
         return
@@ -1061,7 +1061,7 @@ def check_barcode_zone(rep: FileReport, cover_path: Path) -> None:
     # Back trim rect in wrap coords
     back_left = BLEED_IN
     back_bottom = BLEED_IN  # from bottom of wrap
-    # Barcode: bottom-right of BACK — inward from back trim
+    # Barcode: bottom-right of BACK -- inward from back trim
     # Zone: from (back_right - 2.0in) to back_right, bottom 1.2in of trim
     zone_right = back_left + TRIM_W_IN
     zone_left = zone_right - BARCODE_W_IN
@@ -1076,7 +1076,7 @@ def check_barcode_zone(rep: FileReport, cover_path: Path) -> None:
     y0, y1 = max(0, y0), min(h_px, y1)
     crop = im.crop((x0, y0, x1, y1))
     gray = np.array(crop.convert("L"))
-    # "Clear" means mostly uniform / no dark art — allow solid light bg
+    # "Clear" means mostly uniform / no dark art -- allow solid light bg
     # Fail if significant dark ink variance (line art / text)
     dark = int(np.count_nonzero(gray < 80))
     frac = dark / max(1, gray.size)
@@ -1087,7 +1087,7 @@ def check_barcode_zone(rep: FileReport, cover_path: Path) -> None:
             "barcode_zone",
             "FAIL",
             f"back BR zone has dark_frac={frac:.2%}, std={std:.1f} "
-            f"(want clear ~{BARCODE_W_IN}×{BARCODE_H_IN} in); spine_inferred={spine_in:.4f}",
+            f"(want clear ~{BARCODE_W_IN}x{BARCODE_H_IN} in); spine_inferred={spine_in:.4f}",
             hard=True,
         )
     else:
@@ -1173,7 +1173,7 @@ def check_page_numbers(
         sample_idxs.append(n - 1)
 
     text_hits = 0
-    # Footer-like page numbers: a line that is only 1–3 digits (optional spaces),
+    # Footer-like page numbers: a line that is only 1-3 digits (optional spaces),
     # not body text that happens to contain a number.
     footer_num_re = re.compile(r"(?m)^\s*\d{1,3}\s*$")
     for i in sample_idxs:
@@ -1215,12 +1215,12 @@ def check_page_numbers(
             raster_note = f"pdf2image render failed: {e}"
     except ImportError:
         raster_note = (
-            "pdf2image not installed (optional; needs poppler) — "
+            "pdf2image not installed (optional; needs poppler) -- "
             "drawn numerals in corners cannot be raster-checked"
         )
 
-    # Pass if either text or raster finds numbers on ≥2 sample pages,
-    # or ≥1 when the book is tiny.
+    # Pass if either text or raster finds numbers on >=2 sample pages,
+    # or >=1 when the book is tiny.
     need = 2 if len(sample_idxs) >= 2 else 1
     if text_hits >= need or raster_hits >= need:
         rep.add(
@@ -1230,7 +1230,7 @@ def check_page_numbers(
         )
         return
 
-    # Single-method weak signal: still fail hard — teammates need reliable numbers
+    # Single-method weak signal: still fail hard -- teammates need reliable numbers
     if text_hits == 0 and raster_hits == 0:
         rep.add(
             "page_numbers",
@@ -1245,7 +1245,7 @@ def check_page_numbers(
             "page_numbers",
             "FAIL",
             f"insufficient page-number evidence (text_digit_pages={text_hits}, "
-            f"{raster_note}; need ≥{need} sample hits). "
+            f"{raster_note}; need >={need} sample hits). "
             "Ensure every interior page shows a clear page number",
         )
 
